@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;height:100%;background:#10131c;overflow:hidden;font-family:system-ui,sans-serif}
+  #hud{position:absolute;top:10px;left:10px;display:flex;gap:8px;align-items:center;color:#cfd6e6;font-size:12px}
+  button{background:#2f3e6b;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
+  button:hover{background:#41559a}
+</style></head>
+<body>
+<div id="hud"><button id="mode">Walkthrough</button><span id="info"></span></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const DATA = __DATA__;
+const W = DATA.width, segs = DATA.segments;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x10131c);
+scene.fog = new THREE.Fog(0x10131c, 80, 400);
+const cam = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 2000);
+const renderer = new THREE.WebGLRenderer({antialias: true});
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 0.9));
+const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+sun.position.set(40, 80, 30);
+scene.add(sun);
+scene.add(new THREE.GridHelper(600, 120, 0x2a3350, 0x1b2133));
+
+const BASE = {
+  concrete: {color: 0x9a9a9a, rough: 0.9, op: 1},
+  wood:     {color: 0xb07d45, rough: 0.7, op: 1},
+  glass:    {color: 0x9fd8ee, rough: 0.1, op: 0.45},
+};
+function mat(name, opacity) {
+  const b = BASE[name] || BASE.concrete;
+  const o = Math.min(b.op, opacity);
+  return new THREE.MeshStandardMaterial({
+    color: b.color, roughness: b.rough, transparent: o < 1, opacity: o, side: THREE.DoubleSide});
+}
+function box(w, h, d, m, x, y, z) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+  mesh.position.set(x, y, z);
+  return mesh;
+}
+
+const pts = [];
+segs.forEach(s => {
+  const g = new THREE.Group();
+  g.position.set(s.x, 0, s.z);
+  g.rotation.y = s.heading;
+  const L = s.length, H = s.height;
+  const wallOp = 1 - 0.8 * s.openness;
+  g.add(box(W, 0.3, L, mat(s.material, 1), 0, 0.15, 0));
+  g.add(box(0.25, H, L, mat(s.material, wallOp), -W / 2, H / 2, 0));
+  g.add(box(0.25, H, L, mat(s.material, wallOp), W / 2, H / 2, 0));
+  if (s.openness < 0.6) g.add(box(W, 0.25, L, mat(s.material, 1 - s.openness), 0, H, 0));
+  const fin = mat("concrete", 1);
+  for (let i = 0; i < s.ribs; i++) {
+    const z = -L / 2 + (i + 0.5) * (L / s.ribs);
+    g.add(box(0.2, H * 1.05, 0.2, fin, -W / 2 - 0.25, H * 0.525, z));
+    g.add(box(0.2, H * 1.05, 0.2, fin, W / 2 + 0.25, H * 0.525, z));
+  }
+  scene.add(g);
+  pts.push(new THREE.Vector3(s.x0, 1.7, s.z0));
+});
+if (segs.length) {
+  const l = segs[segs.length - 1];
+  pts.push(new THREE.Vector3(l.x0 + Math.sin(l.heading) * l.length, 1.7, l.z0 + Math.cos(l.heading) * l.length));
+}
+
+// simple orbit controls (drag = rotate, wheel = zoom)
+const xs = segs.map(s => s.x), zs = segs.map(s => s.z);
+const mid = a => a.length ? (Math.min(...a) + Math.max(...a)) / 2 : 0;
+const ext = a => a.length ? Math.max(...a) - Math.min(...a) : 0;
+const target = new THREE.Vector3(mid(xs), 5, mid(zs));
+let theta = 0.8, phi = 1.0, radius = Math.max(20, ext(xs), ext(zs)) * 0.9 + 25, walking = false, u = 0;
+function orbit() {
+  cam.position.set(
+    target.x + radius * Math.sin(phi) * Math.sin(theta),
+    target.y + radius * Math.cos(phi),
+    target.z + radius * Math.sin(phi) * Math.cos(theta));
+  cam.lookAt(target);
+}
+let drag = false, lx = 0, ly = 0;
+const cv = renderer.domElement;
+cv.addEventListener("mousedown", e => { drag = true; lx = e.clientX; ly = e.clientY; });
+addEventListener("mouseup", () => drag = false);
+addEventListener("mousemove", e => {
+  if (!drag || walking) return;
+  theta -= (e.clientX - lx) * 0.005;
+  phi = Math.min(Math.PI / 2 - 0.02, Math.max(0.1, phi - (e.clientY - ly) * 0.005));
+  lx = e.clientX; ly = e.clientY;
+});
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (!walking) radius = Math.max(5, radius * (1 + Math.sign(e.deltaY) * 0.1));
+}, {passive: false});
+
+// walkthrough along the path
+const curve = pts.length > 1 ? new THREE.CatmullRomCurve3(pts) : null;
+const btn = document.getElementById("mode");
+btn.onclick = () => { walking = !walking; u = 0; btn.textContent = walking ? "Back to orbit" : "Walkthrough"; };
+document.getElementById("info").textContent =
+  segs.length + " segments | tempo " + DATA.tempo + " BPM | drag to rotate, scroll to zoom";
+
+let last = performance.now();
+function loop(now) {
+  const dt = (now - last) / 1000; last = now;
+  if (walking && curve) {
+    u = Math.min(1, u + (4 * dt) / curve.getLength());
+    cam.position.copy(curve.getPointAt(u));
+    cam.lookAt(curve.getPointAt(Math.min(1, u + 0.02)));
+    if (u >= 1) u = 0;
+  } else orbit();
+  renderer.render(scene, cam);
+  requestAnimationFrame(loop);
+}
+addEventListener("resize", () => {
+  cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+requestAnimationFrame(loop);
+</script></body></html>
