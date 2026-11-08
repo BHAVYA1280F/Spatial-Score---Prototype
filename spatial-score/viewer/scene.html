@@ -7,10 +7,11 @@
   button:hover{background:#41559a}
   #bar{position:absolute;bottom:12px;left:12px;right:12px;display:none;align-items:center;gap:10px;color:#cfd6e6;font-size:12px}
   #seek{flex:1}
+  select{background:#2f3e6b;color:#fff;border:0;border-radius:6px;padding:4px 6px}
 </style></head>
 <body>
 <div id="hud"><button id="mode">Walkthrough</button><button id="music"></button><button id="full" title="Look up in tall rooms, sway, rise in the climax, aerial finale">Full experience: off</button><button id="pp" style="display:none">&#10074;&#10074;</button><span id="info"></span><span id="legend"></span><b id="zone"></b></div>
-<div id="bar"><input id="seek" type="range" min="0" value="0" step="0.05"><span id="time"></span></div>
+<div id="bar"><label>Speed <select id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="1.5">1.5x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option></select></label><input id="seek" type="range" min="0" value="0" step="0.05"><span id="time"></span></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const DATA = __DATA__;
@@ -162,7 +163,7 @@ function pathAt(d) {                      // distance -> point on the path (extr
   return {x: s.x0 + Math.sin(s.heading) * p, z: s.z0 + Math.cos(s.heading) * p, i: i};
 }
 // MUSIC-HELPERS-END
-let music = false, playing = false, full = false, tVirt = 0, camInit = false, curH = 1.7, curLat = 0, curFov = 55;
+let speed = 1, music = false, playing = false, full = false, tVirt = 0, camInit = false, curH = 1.7, curLat = 0, curFov = 55;
 const camPos = new THREE.Vector3(), lookPos = new THREE.Vector3();
 const fmt = s => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
 let sound = false;                         // true = song playing, false = silent timed walk
@@ -182,7 +183,7 @@ function startMusic(withSound) {
   if (music) stopMusic();
   sound = !!(withSound && audio);
   music = true; playing = true; camInit = false; setT(0);
-  if (sound) audio.play().catch(() => {});
+  if (sound) { audio.playbackRate = speed; audio.preservesPitch = true; audio.play().catch(() => {}); }
   bar.style.display = "flex"; ppBtn.style.display = ""; ppBtn.innerHTML = "&#10074;&#10074;";
   seek.max = endT; refreshBtns();
 }
@@ -203,11 +204,12 @@ musicBtn.onclick = () => (music && sound) ? stopMusic() : startMusic(true); // w
 fullBtn.onclick = () => { full = !full; fullBtn.textContent = "Full experience: " + (full ? "on" : "off"); };
 ppBtn.onclick = togglePlay;
 seek.oninput = () => setT(parseFloat(seek.value));
+document.getElementById("speed").onchange = e => { speed = parseFloat(e.target.value); if (audio) { audio.playbackRate = speed; audio.preservesPitch = true; } };
 if (audio) audio.addEventListener("ended", () => { playing = false; ppBtn.innerHTML = "&#9654;"; });
 refreshBtns();
 
 function musicStep(dt) {
-  if (!sound && playing) tVirt += dt;
+  if (!sound && playing) tVirt += dt * speed;
   let t = curT();
   if (t >= endT) {                          // the analysed part of the song is over
     t = endT;
