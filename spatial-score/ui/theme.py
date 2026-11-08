@@ -21,7 +21,7 @@ section[data-testid="stSidebar"]{background:rgba(14,12,24,.92);border-right:1px 
 .reveal{opacity:0;transform:translateY(46px) scale(.97);transition:opacity .9s cubic-bezier(.2,.8,.2,1),transform .9s cubic-bezier(.2,.8,.2,1)}
 .reveal.in{opacity:1;transform:none}
 .reveal.done{transition:transform .18s ease-out,opacity .3s,box-shadow .3s,border-color .3s}
-.float{transform:translate3d(0,calc(var(--sy) * var(--sp,0) * -1px),0)}
+.float{transform:translate3d(0,var(--py,0px),0)}
 .tilt{position:relative;transform-style:preserve-3d;will-change:transform}
 .tilt::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .25s;background:radial-gradient(260px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.22),transparent 60%)}
 .tilt:hover::after{opacity:1}
@@ -97,12 +97,16 @@ D.addEventListener('scroll',function(e){var el=e.target;
  if(!el||!el.matches||!el.matches('[data-testid="stMain"],section.main,.main'))return;
  var st=el.scrollTop||0,mx=el.scrollHeight-el.clientHeight;
  D.documentElement.style.setProperty('--sy',st);
+ par();
  bar.style.transform='scaleX('+(mx>0?st/mx:0)+')';
 },true);
 var io=new P.IntersectionObserver(function(es){es.forEach(function(en){
  if(en.isIntersecting&&!en.target.classList.contains('in')){en.target.classList.add('in');
   setTimeout(function(){en.target.classList.add('done');},1000);}});},{threshold:.12});
-function scan(){D.querySelectorAll('.reveal:not([data-o])').forEach(function(n){n.setAttribute('data-o','1');io.observe(n);});}
+function par(){var vh=P.innerHeight;D.querySelectorAll('.float').forEach(function(n){
+ var q=n.parentElement.getBoundingClientRect(),d=-(q.top+q.height/2-vh/2)*(parseFloat(n.style.getPropertyValue('--sp'))||0);
+ n.style.setProperty('--py',Math.max(-60,Math.min(60,d))+'px');});}
+function scan(){D.querySelectorAll('.reveal:not([data-o])').forEach(function(n){n.setAttribute('data-o','1');io.observe(n);});par();}
 new P.MutationObserver(scan).observe(D.body,{childList:true,subtree:true});scan();
 })();"""
 

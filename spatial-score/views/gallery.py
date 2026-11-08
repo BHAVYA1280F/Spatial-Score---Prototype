@@ -101,11 +101,6 @@ if sel and Path(sel).exists():
             st.session_state.pop("sample", None)
             st.rerun()
 
-if not any(p.stem not in META for p in tracks):
-    st.markdown('<div class="card reveal" style="--c:#4f8cff;margin:1.5rem 0"><h3>Add your own tracks</h3><p>Put audio files (mp3, wav, ogg or flac) '
-                'in <b>assets/samples/</b>, for example house-of-balloons.mp3, and they appear here with their own button. Use music you own or have '
-                'permission to use. The four tracks above are original pieces made for this project.</p></div>', unsafe_allow_html=True)
-
 # ---------------- album covers ----------------
 st.markdown('<div class="eyebrow reveal">Album art</div>', unsafe_allow_html=True)
 real = load_covers(str(COVER_DIR))
@@ -116,8 +111,5 @@ if real:
 else:
     for i, (title, pal) in enumerate(g.COVERS):
         cards.append(g.cover_card(g.cover_svg(i, pal), title, pal, SP[i % 4]))
-    st.markdown('<div class="card reveal" style="--c:#4f8cff;margin:1rem 0 2rem"><h3>Showing original sample artwork</h3><p>Add your own album covers by putting '
-                'image files in <b>assets/covers/</b> (for example after-hours.jpg). They replace these tiles automatically and a colour palette is taken from each one. '
-                'Use covers you own or have permission to display.</p></div>', unsafe_allow_html=True)
-st.markdown('<div class="grid4" style="margin-top:2rem">' + "".join(cards) + "</div>", unsafe_allow_html=True)
+st.markdown('<div class="grid4" style="margin-top:3.5rem;margin-bottom:3rem">' + "".join(cards) + "</div>", unsafe_allow_html=True)
 st.markdown(g.band("SOUND SPACE SOUND SPACE ", rev=True), unsafe_allow_html=True)
