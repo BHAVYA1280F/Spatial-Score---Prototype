@@ -66,7 +66,7 @@ def assign_zones(energy, dens, intro_frac=0.15, outro_frac=0.15, climax_frac=0.1
 
 def map_features(features, height_range=(3.0, 18.0), length_scale=1.0,
                  turn_strength=0.6, width=4.0, zones=True,
-                 intro_frac=0.15, outro_frac=0.15, climax_frac=0.15):
+                 intro_frac=0.15, outro_frac=0.15, climax_frac=0.15, path_mode="change"):
     segs = features["segments"]
     if not segs:
         return {"tempo": features.get("tempo", 0), "width": width, "zones": {}, "segments": []}
@@ -76,6 +76,7 @@ def map_features(features, height_range=(3.0, 18.0), length_scale=1.0,
     bright = _norm([s["centroid"] for s in segs])
     dens = _norm([s["onset_density"] for s in segs])
     n = len(segs)
+    pitch_sm = np.convolve(np.pad(pitch, (2, 2), mode="edge"), np.ones(5) / 5, mode="valid")  # melody contour
 
     tempo = float(features.get("tempo") or 100.0)
     compression = float(np.clip(100.0 / tempo, 0.6, 1.5))  # fast = compressed
@@ -115,7 +116,11 @@ def map_features(features, height_range=(3.0, 18.0), length_scale=1.0,
             ribs = max(2, int(ribs * (1 - 0.5 * t)))
             light = 0.5 * (1 - t) + 0.1
 
-        heading += (float(pitch[i]) - 0.5) * turn_strength * 0.5
+        if path_mode == "level":   # old rule: turn by pitch height (tends to loop)
+            heading += (float(pitch[i]) - 0.5) * turn_strength * 0.5
+        else:                      # new rule: turn by pitch movement, relaxing back to straight
+            move = float(pitch_sm[i] - pitch_sm[i - 1]) if i > 0 else 0.0
+            heading = heading * 0.9 + move * turn_strength * 6
         dx, dz = math.sin(heading), math.cos(heading)
         out.append({
             "segment": i, "zone": zone,

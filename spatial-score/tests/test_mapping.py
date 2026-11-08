@@ -30,3 +30,10 @@ def test_zones_progression():
 def test_zones_off():
     arch = map_features(demo_features(), zones=False)
     assert all(s["zone"] == "none" for s in arch["segments"])
+
+
+def test_path_does_not_loop():
+    import math
+    arch = map_features(demo_features())
+    heads = [s["heading"] for s in arch["segments"]]
+    assert max(abs(h) for h in heads) < math.pi
