@@ -7,7 +7,7 @@ def test_mapping_shapes_and_ranges():
     segs = arch["segments"]
     assert len(segs) == 28
     for s in segs:
-        assert 3 <= s["height"] <= 18
+        assert 1.5 <= s["height"] <= 18 * 1.4 + 0.1
         assert 2 <= s["length"] <= 12
         assert 0 <= s["openness"] <= 1
         assert s["material"] in {"concrete", "wood", "glass"}
@@ -16,3 +16,17 @@ def test_mapping_shapes_and_ranges():
 
 def test_empty():
     assert map_features({"tempo": 100, "segments": []})["segments"] == []
+
+
+def test_zones_progression():
+    arch = map_features(demo_features())
+    z = [s["zone"] for s in arch["segments"]]
+    assert z[0] == "intro" and z[-1] == "outro"
+    assert "climax" in z
+    assert set(z) <= {"intro", "rhythm", "harmony", "climax", "outro"}
+    assert z.index("climax") > z.index("intro")
+
+
+def test_zones_off():
+    arch = map_features(demo_features(), zones=False)
+    assert all(s["zone"] == "none" for s in arch["segments"])

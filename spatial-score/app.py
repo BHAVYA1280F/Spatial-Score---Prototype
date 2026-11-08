@@ -21,6 +21,11 @@ with st.sidebar:
     hr = st.slider("Height range (pitch)", 2.0, 30.0, (3.0, 18.0))
     length_scale = st.slider("Length scale (duration)", 0.5, 2.0, 1.0, 0.1)
     turn = st.slider("Path turning (melody)", 0.0, 2.0, 0.6, 0.1)
+    st.header("Zones (song progression)")
+    use_zones = st.checkbox("Divide pavilion into zones", True)
+    intro_pct = st.slider("Intro length (%)", 5, 30, 15)
+    outro_pct = st.slider("Outro length (%)", 5, 30, 15)
+    climax_pct = st.slider("Climax length (%)", 5, 30, 15)
 
 file = st.file_uploader("Upload music (MP3 / WAV)", type=["mp3", "wav", "ogg", "flac"])
 use_demo = st.checkbox("Use demo data (no audio needed)", value=file is None)
@@ -41,7 +46,9 @@ elif use_demo:
     features = demo_features()
 
 if features:
-    arch = map_features(features, hr, length_scale, turn)
+    arch = map_features(features, hr, length_scale, turn, zones=use_zones,
+                        intro_frac=intro_pct / 100, outro_frac=outro_pct / 100,
+                        climax_frac=climax_pct / 100)
     html = (Path(__file__).parent / "viewer" / "scene.html").read_text(encoding="utf-8")
     html = html.replace("__DATA__", json.dumps(arch))
     components.html(html, height=640)
@@ -51,6 +58,8 @@ if features:
     c2.metric("Spaces generated", len(arch["segments"]))
     c3.download_button("Download parameters (JSON)", json.dumps(arch, indent=2),
                        "spatial_score.json", "application/json")
+    if use_zones:
+        st.caption("Zones: " + "  ›  ".join(f"{k.title()} ({v})" for k, v in arch["zones"].items()))
     with st.expander("Segment data"):
         st.dataframe(pd.DataFrame(arch["segments"]), use_container_width=True)
 else:
