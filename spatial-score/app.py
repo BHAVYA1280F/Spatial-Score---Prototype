@@ -1,4 +1,5 @@
 """SPATIAL SCORE - Streamlit app: music in, architecture out."""
+import base64
 import json
 from pathlib import Path
 
@@ -36,6 +37,16 @@ def cached_analyse(data: bytes, name: str, max_s: int, bps: int):
     return analyse(data, name, max_s, bps)
 
 
+MIME = {"mp3": "audio/mpeg", "wav": "audio/wav", "ogg": "audio/ogg", "flac": "audio/flac"}
+audio_uri = None
+if file is not None and not use_demo:
+    raw = file.getvalue()
+    if len(raw) <= 15 * 1024 * 1024:
+        ext = file.name.rsplit(".", 1)[-1].lower()
+        audio_uri = f"data:{MIME.get(ext, 'audio/mpeg')};base64," + base64.b64encode(raw).decode()
+    else:
+        st.warning("File is over 15 MB, so the walkthrough will run without music (analysis still works).")
+
 features = None
 if file is not None and not use_demo:
     try:
@@ -50,8 +61,11 @@ if features:
                         intro_frac=intro_pct / 100, outro_frac=outro_pct / 100,
                         climax_frac=climax_pct / 100)
     html = (Path(__file__).parent / "viewer" / "scene.html").read_text(encoding="utf-8")
-    html = html.replace("__DATA__", json.dumps(arch))
+    html = html.replace("__DATA__", json.dumps(arch)).replace("__AUDIO__", json.dumps(audio_uri))
     components.html(html, height=640)
+    st.caption("Press ♪ Music walk to walk through the pavilion in time with the song. "
+               "Turn on 'Full experience' to look around, rise in the climax and finish with an aerial view. "
+               f"The walk covers the analysed part of the song (first {max_seconds} s at most).")
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Tempo", f"{arch['tempo']} BPM")
