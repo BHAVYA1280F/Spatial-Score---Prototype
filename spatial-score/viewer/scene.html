@@ -3,11 +3,11 @@
 <style>
   html,body{margin:0;height:100%;background:#10131c;overflow:hidden;font-family:system-ui,sans-serif}
   #hud{position:absolute;top:10px;left:10px;right:10px;flex-wrap:wrap;display:flex;gap:8px;align-items:center;color:#cfd6e6;font-size:12px}
-  button{background:#2f3e6b;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
-  button:hover{background:#41559a}
+  button{background:#c4122f;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
+  button:hover{background:#ff2d55}
   #bar{position:absolute;bottom:12px;left:12px;right:12px;display:none;align-items:center;gap:10px;color:#cfd6e6;font-size:12px}
   #seek{flex:1}
-  select{background:#2f3e6b;color:#fff;border:0;border-radius:6px;padding:4px 6px}
+  select{background:#c4122f;color:#fff;border:0;border-radius:6px;padding:4px 6px}
 </style></head>
 <body>
 <div id="hud"><button id="mode">Walkthrough</button><button id="music"></button><button id="full" title="Look up in tall rooms, sway, rise in the climax, aerial finale">Full experience: off</button><button id="pp" style="display:none">&#10074;&#10074;</button><span id="info"></span><span id="legend"></span><b id="zone"></b></div>
@@ -177,7 +177,7 @@ function orbitPos() {
 }
 function refreshBtns() {
   btn.textContent = music && !sound ? "\u25A0 Stop" : "Walkthrough";
-  musicBtn.textContent = music && sound ? "\u25A0 Stop" : "\u266A Walk with music";
+  musicBtn.textContent = music && sound ? "\u25A0 Stop" : "Walk with music";
 }
 function startMusic(withSound) {
   if (music) stopMusic();
