@@ -142,7 +142,7 @@ const audio = AUDIO_SRC ? new Audio(AUDIO_SRC) : null;
 const musicBtn = document.getElementById("music"), fullBtn = document.getElementById("full"),
       ppBtn = document.getElementById("pp"), bar = document.getElementById("bar"),
       seek = document.getElementById("seek"), timeEl = document.getElementById("time");
-musicBtn.textContent = audio ? "\u266A Music walk" : "\u25B6 Timed walk (no music)";
+musicBtn.style.display = audio ? "" : "none";
 // MUSIC-HELPERS-START
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const starts = segs.map(s => s.start_time);
@@ -165,48 +165,56 @@ function pathAt(d) {                      // distance -> point on the path (extr
 let music = false, playing = false, full = false, tVirt = 0, camInit = false, curH = 1.7, curLat = 0, curFov = 55;
 const camPos = new THREE.Vector3(), lookPos = new THREE.Vector3();
 const fmt = s => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
-const curT = () => audio ? audio.currentTime : tVirt;
-function setT(t) { if (audio) audio.currentTime = t; else tVirt = t; camInit = false; }
+let sound = false;                         // true = song playing, false = silent timed walk
+const curT = () => sound ? audio.currentTime : tVirt;
+function setT(t) { if (sound) audio.currentTime = t; else tVirt = t; camInit = false; }
 function orbitPos() {
   return new THREE.Vector3(
     target.x + radius * Math.sin(phi) * Math.sin(theta),
     target.y + radius * Math.cos(phi),
     target.z + radius * Math.sin(phi) * Math.cos(theta));
 }
-function startMusic() {
-  walking = false; btn.textContent = "Walkthrough";
+function refreshBtns() {
+  btn.textContent = music && !sound ? "\u25A0 Stop" : "Walkthrough";
+  musicBtn.textContent = music && sound ? "\u25A0 Stop" : "\u266A Walk with music";
+}
+function startMusic(withSound) {
+  if (music) stopMusic();
+  sound = !!(withSound && audio);
   music = true; playing = true; camInit = false; setT(0);
-  if (audio) audio.play().catch(() => {});
+  if (sound) audio.play().catch(() => {});
   bar.style.display = "flex"; ppBtn.style.display = ""; ppBtn.innerHTML = "&#10074;&#10074;";
-  seek.max = endT; musicBtn.textContent = "\u25A0 Stop";
+  seek.max = endT; refreshBtns();
 }
 function stopMusic() {
   if (!music) return;
-  music = false; playing = false; if (audio) audio.pause();
+  music = false; playing = false; if (audio) audio.pause(); sound = false;
   bar.style.display = "none"; ppBtn.style.display = "none"; zoneEl.textContent = "";
-  musicBtn.textContent = audio ? "\u266A Music walk" : "\u25B6 Timed walk (no music)";
-  cam.fov = 55; curFov = 55; cam.updateProjectionMatrix();
+  cam.fov = 55; curFov = 55; cam.updateProjectionMatrix(); refreshBtns();
 }
 function togglePlay() {
   if (!playing && curT() >= endT - 0.05) setT(0);
   playing = !playing;
-  if (audio) { if (playing) audio.play().catch(() => {}); else audio.pause(); }
+  if (sound) { if (playing) audio.play().catch(() => {}); else audio.pause(); }
   ppBtn.innerHTML = playing ? "&#10074;&#10074;" : "&#9654;";
 }
-musicBtn.onclick = () => music ? stopMusic() : startMusic();
+btn.onclick = () => (music && !sound) ? stopMusic() : startMusic(false);   // silent walk, same timeline
+musicBtn.onclick = () => (music && sound) ? stopMusic() : startMusic(true); // walk with the song
 fullBtn.onclick = () => { full = !full; fullBtn.textContent = "Full experience: " + (full ? "on" : "off"); };
 ppBtn.onclick = togglePlay;
 seek.oninput = () => setT(parseFloat(seek.value));
 if (audio) audio.addEventListener("ended", () => { playing = false; ppBtn.innerHTML = "&#9654;"; });
+refreshBtns();
 
 function musicStep(dt) {
-  if (!audio && playing) tVirt += dt;
+  if (!sound && playing) tVirt += dt;
   let t = curT();
   if (t >= endT) {                          // the analysed part of the song is over
     t = endT;
     if (playing) { playing = false; if (audio) audio.pause(); ppBtn.innerHTML = "&#9654;"; }
   }
-  seek.value = t; timeEl.textContent = fmt(t) + " / " + fmt(endT);
+  seek.value = t; timeEl.textContent = fmt(t) + " / " + fmt(endT) +
+    (DATA.song_seconds && DATA.song_seconds > endT + 1.5 ? "  (analysed part; song is " + fmt(DATA.song_seconds) + ")" : "");
   const d = distAt(t), P = pathAt(d), Q = pathAt(d + 4), s = segs[P.i];
   zoneEl.textContent = s.zone && s.zone !== "none" ? "Zone: " + s.zone : "";
   let dx = Q.x - P.x, dz = Q.z - P.z; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
