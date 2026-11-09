@@ -168,3 +168,34 @@ function frame(now){var t=(now-t0)/1000;m+=(Math.min(1,sy/420)-m)*.08;x.clearRec
  requestAnimationFrame(frame)}
 requestAnimationFrame(frame);
 </script></body></html>"""
+
+
+def summary_html(arch):
+    S = arch["segments"]
+    n = len(S)
+    if not n:
+        return ""
+    avg = lambda k, rows: sum(r[k] for r in rows) / max(1, len(rows))
+    hs = [s["height"] for s in S]
+    cards = [("Rooms", n), ("Path length", f'{sum(s["length"] for s in S):.0f} m'),
+             ("Height range", f"{min(hs):.1f} to {max(hs):.1f} m"), ("Average height", f"{sum(hs) / n:.1f} m"),
+             ("Average openness", f'{avg("openness", S) * 100:.0f}%'), ("Total ribs", sum(s["ribs"] for s in S))]
+    top = '<div class="grid3">' + "".join(
+        f'<div class="card stat tilt reveal"><b>{v}</b><span>{k}</span></div>' for k, v in cards) + "</div>"
+    mats = {"concrete": "#8a8a8a", "wood": "#b07d45", "glass": "#9fd8ee"}
+    mb = '<div class="mbar">' + "".join(
+        f'<i style="flex:{max(0.001, sum(1 for s in S if s["material"] == k))};background:{c}" title="{k}: {sum(1 for s in S if s["material"] == k)} rooms"></i>'
+        for k, c in mats.items()) + "</div>"
+    legend = " ".join(f'<span style="color:{c}">{k} {sum(1 for s in S if s["material"] == k)}</span>' for k, c in mats.items())
+    rows = ""
+    for name, col, _, _ in ZONES:
+        z = [s for s in S if s["zone"] == name.lower()]
+        if z:
+            rows += (f'<tr><td style="color:{col}"><b>{name}</b></td><td>{len(z)}</td><td>{avg("height", z):.1f}</td><td>{avg("length", z):.1f}</td>'
+                     f'<td>{avg("openness", z) * 100:.0f}%</td><td>{avg("density", z) * 100:.0f}%</td><td>{sum(s["ribs"] for s in z)}</td><td>{avg("light", z):.2f}</td></tr>')
+    table = ""
+    if rows:
+        table = ('<table class="ztable"><tr><th>Zone</th><th>Rooms</th><th>Avg height</th><th>Avg length</th><th>Openness</th>'
+                 f'<th>Density</th><th>Ribs</th><th>Light</th></tr>{rows}</table>')
+    return (top + '<div class="card reveal" style="margin-top:1rem"><p style="margin:0 0 .5rem">Materials chosen from brightness</p>' + mb +
+            f'<p style="margin:.5rem 0 0;font-size:.85rem">{legend}</p>{table and "<div style=margin-top:1rem></div>" + table}</div>')

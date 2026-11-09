@@ -37,3 +37,19 @@ def test_path_does_not_loop():
     arch = map_features(demo_features())
     heads = [s["heading"] for s in arch["segments"]]
     assert max(abs(h) for h in heads) < math.pi
+
+
+def test_rooms_expose_the_music_that_shaped_them():
+    arch = map_features(demo_features())
+    assert arch["compression"] > 0
+    for s in arch["segments"]:
+        assert set(s["raw"]) == {"pitch_midi", "rms", "centroid", "onset_density"}
+        assert set(s["norm"]) == {"pitch", "energy", "bright", "density"}
+        assert set(s["base"]) == {"height", "openness", "ribs"}
+        assert all(0 <= v <= 1 for v in s["norm"].values())
+
+
+def test_demo_has_chart_data():
+    v = demo_features()["viz"]
+    assert len(v["wave"]) == len(v["energy"]) == len(v["pitch"]) == 300
+    assert len(v["bands"]) == 5 and v["beats"]

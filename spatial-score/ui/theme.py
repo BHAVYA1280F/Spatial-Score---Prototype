@@ -61,6 +61,9 @@ section[data-testid="stSidebar"]{background:rgba(14,12,24,.92);border-right:1px 
 .score{display:flex;align-items:flex-end;gap:3px;height:130px;padding:.8rem;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
 .score i{flex:1;min-width:2px;background:var(--c);border-radius:3px 3px 0 0;opacity:.85;transform-origin:bottom;animation:grow .7s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i) * 14ms);transition:transform .2s,filter .2s}
 .score i:hover{transform:scaleY(1.18);filter:brightness(1.5)}.score i:hover+i,.score i:has(+ i:hover){transform:scaleY(1.08)}
+.ztable{width:100%;border-collapse:collapse;font-size:.9rem}.ztable th{color:#a79fc0;font-weight:400;text-align:left;padding:.4rem .6rem;border-bottom:1px solid rgba(255,255,255,.1)}
+.ztable td{padding:.45rem .6rem;border-bottom:1px solid rgba(255,255,255,.06)}.ztable tr:hover td{background:rgba(255,255,255,.05)}
+.mbar{display:flex;height:14px;border-radius:7px;overflow:hidden}.mbar i{display:block}.mbar i:hover{filter:brightness(1.4)}
 .stat{text-align:center}.stat b{display:block;font-family:'Syne';font-size:2.2rem}.stat span{color:#a79fc0;font-size:.8rem;letter-spacing:.2em;text-transform:uppercase}
 .chips span{display:inline-block;margin:.25rem .3rem .25rem 0;padding:.3rem .8rem;border-radius:999px;border:1px solid rgba(255,255,255,.18);font-size:.85rem;transition:.25s}
 .chips span:hover{background:#ff2d55;border-color:#ff2d55;transform:translateY(-3px)}

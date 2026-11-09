@@ -63,21 +63,19 @@ if sel and Path(sel).exists():
     if features:
         arch = map_features(features)
         arch["song_seconds"] = features.get("total_seconds")
+        arch["viz"] = features.get("viz")
         segs = arch["segments"]
         if segs:
             end_t = segs[-1]["start_time"] + segs[-1]["duration"]
             fmt = lambda x: f"{int(x // 60)}:{int(x % 60):02d}"
             st.markdown(g.stats([("Tempo", f"{arch['tempo']} BPM"), ("Spaces", len(segs)), ("Walk length", fmt(end_t))]), unsafe_allow_html=True)
-            st.markdown('<div class="eyebrow reveal">The score</div>' + g.score_strip(segs) +
-                        '<div class="chips" style="margin-top:.6rem">' + "".join(
-                            f'<span style="border-color:{c}">{n} {arch["zones"].get(n.lower(), 0)}</span>' for n, c, _, _ in g.ZONES) + "</div>",
-                        unsafe_allow_html=True)
+            st.markdown('<div class="eyebrow reveal">Architectural parameters</div>' + g.summary_html(arch), unsafe_allow_html=True)
         raw = p.read_bytes()
         audio_uri = (f"data:{MIME[p.suffix.lower()]};base64," + base64.b64encode(raw).decode()) if len(raw) <= 15 * 1024 * 1024 else None
         html = (ROOT / "viewer" / "scene.html").read_text(encoding="utf-8")
         html = html.replace("__DATA__", json.dumps(arch)).replace("__AUDIO__", json.dumps(audio_uri))
-        components.html(html, height=640)
-        st.caption("Press Walk with music to hear the track while you move through its pavilion. Full experience and Speed work here too.")
+        components.html(html, height=640 + (920 if arch.get("viz") else 0))
+        st.caption("Click a room (or any chart) to see which musical information shaped it. Press Walk with music to hear the track while you move through its pavilion. Full experience and Speed work here too.")
         if st.button("Close"):
             st.session_state.pop("sample", None)
             st.rerun()

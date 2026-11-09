@@ -80,6 +80,7 @@ if features:
     arch = map_features(features, hr, length_scale, turn, zones=use_zones,
                         intro_frac=intro_pct / 100, outro_frac=outro_pct / 100, climax_frac=climax_pct / 100)
     arch["song_seconds"] = features.get("total_seconds")
+    arch["viz"] = features.get("viz")
     segs = arch["segments"]
     if segs:
         end_t = segs[-1]["start_time"] + segs[-1]["duration"]
@@ -89,14 +90,11 @@ if features:
             st.warning(f"Only the first {fmt(end_t)} of this {fmt(total)} track was analysed, so the walk lasts {fmt(end_t)}. "
                        "Raise 'Max audio length' or tick 'Analyse the whole song' to cover the full track.")
         st.markdown(g.stats([("Tempo", f"{arch['tempo']} BPM"), ("Spaces", len(segs)), ("Walk length", fmt(end_t))]), unsafe_allow_html=True)
-        st.markdown('<div class="eyebrow reveal">The score</div>' + g.score_strip(segs) +
-                    '<div class="chips" style="margin-top:.6rem">' + "".join(
-                        f'<span style="border-color:{c}">{n} {arch["zones"].get(n.lower(), 0)}</span>' for n, c, _, _ in g.ZONES
-                        if use_zones) + "</div>", unsafe_allow_html=True)
+        st.markdown('<div class="eyebrow reveal">Architectural parameters</div>' + g.summary_html(arch), unsafe_allow_html=True)
     html = (ROOT / "viewer" / "scene.html").read_text(encoding="utf-8")
     html = html.replace("__DATA__", json.dumps(arch)).replace("__AUDIO__", json.dumps(audio_uri))
     st.markdown('<div class="eyebrow reveal">The pavilion</div>', unsafe_allow_html=True)
-    components.html(html, height=640)
+    components.html(html, height=640 + (920 if arch.get("viz") else 0))
     st.caption("Walkthrough is silent. Walk with music plays the song. Both follow the song's timeline, and Full experience works in both.")
     st.download_button("Download parameters (JSON)", json.dumps(arch, indent=2), "spatial_score.json", "application/json")
     with st.expander("Segment data"):

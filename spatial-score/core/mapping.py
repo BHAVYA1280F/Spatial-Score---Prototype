@@ -97,6 +97,7 @@ def map_features(features, height_range=(3.0, 18.0), length_scale=1.0,
         ribs = max(2, int(length / spacing))
         openness = float(energy[i])
         light, layers, tilt = 0.6, 0, 0.0
+        base = {"height": round(height, 2), "openness": round(openness, 2), "ribs": ribs}
 
         if zone == "intro":        # enclosed, soft light, sparse structure
             openness *= 0.3
@@ -116,6 +117,7 @@ def map_features(features, height_range=(3.0, 18.0), length_scale=1.0,
             ribs = max(2, int(ribs * (1 - 0.5 * t)))
             light = 0.5 * (1 - t) + 0.1
 
+        h_prev, move = heading, 0.0
         if path_mode == "level":   # old rule: turn by pitch height (tends to loop)
             heading += (float(pitch[i]) - 0.5) * turn_strength * 0.5
         else:                      # new rule: turn by pitch movement, relaxing back to straight
@@ -130,6 +132,11 @@ def map_features(features, height_range=(3.0, 18.0), length_scale=1.0,
             "openness": round(openness, 2), "density": round(float(dens[i]), 2),
             "material": _material(float(bright[i])),
             "light": round(light, 2), "layers": layers, "tilt": tilt,
+            "raw": {"pitch_midi": round(float(s["pitch_midi"]), 2), "rms": round(float(s["rms"]), 4),
+                    "centroid": round(float(s["centroid"]), 1), "onset_density": round(float(s["onset_density"]), 2)},
+            "norm": {"pitch": round(float(pitch[i]), 3), "energy": round(float(energy[i]), 3),
+                     "bright": round(float(bright[i]), 3), "density": round(float(dens[i]), 3)},
+            "base": base, "move": round(move, 3), "turn_deg": round(math.degrees(heading - h_prev), 1),
             "heading": round(heading, 3),
             "x0": round(px, 2), "z0": round(pz, 2),
             "x": round(px + dx * length / 2, 2), "z": round(pz + dz * length / 2, 2),
@@ -137,4 +144,4 @@ def map_features(features, height_range=(3.0, 18.0), length_scale=1.0,
         px += dx * length
         pz += dz * length
     counts = {z: zl.count(z) for z in ZONE_ORDER + ["none"] if z in zl}
-    return {"tempo": round(tempo, 1), "width": width, "zones": counts, "segments": out}
+    return {"tempo": round(tempo, 1), "compression": round(compression, 2), "width": width, "zones": counts, "segments": out}

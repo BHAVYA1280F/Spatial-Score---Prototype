@@ -1,17 +1,28 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
-  html,body{margin:0;height:100%;background:#10131c;overflow:hidden;font-family:system-ui,sans-serif}
-  #hud{position:absolute;top:10px;left:10px;right:10px;flex-wrap:wrap;display:flex;gap:8px;align-items:center;color:#cfd6e6;font-size:12px}
+  html,body{margin:0;background:transparent;overflow-x:hidden;font-family:system-ui,sans-serif;color:#e6e1f5}
+  #stage{position:relative;height:640px;border-radius:16px;overflow:hidden;background:#10131c}
+  #hud{position:absolute;top:10px;left:10px;right:335px;z-index:2;flex-wrap:wrap;display:flex;gap:8px;align-items:center;color:#cfd6e6;font-size:12px}
   button{background:#c4122f;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
   button:hover{background:#ff2d55}
-  #bar{position:absolute;bottom:12px;left:12px;right:12px;display:none;align-items:center;gap:10px;color:#cfd6e6;font-size:12px}
+  #bar{position:absolute;bottom:12px;left:12px;right:335px;z-index:2;display:none;align-items:center;gap:10px;color:#cfd6e6;font-size:12px}
   #seek{flex:1}
+  #insp{position:absolute;top:10px;right:10px;bottom:10px;width:310px;overflow:auto;z-index:2;background:rgba(14,12,24,.9);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:12px 14px;font-size:12px;box-sizing:border-box}
+  #insp b{color:#fff}.ih{display:flex;gap:8px;align-items:center;border-left:3px solid;padding-left:8px;margin-bottom:8px}.ih span{color:#a79fc0}
+  .ih em{font-style:normal;color:#10131c;padding:1px 9px;border-radius:99px;text-transform:uppercase;font-size:10px;margin-left:auto;font-weight:700}
+  .r{margin:10px 0}.rt{display:flex;justify-content:space-between;gap:8px;color:#a79fc0}.rt b{color:#fff;text-align:right}
+  .bb{height:4px;background:rgba(255,255,255,.1);border-radius:3px;margin:4px 0}.bb i{display:block;height:100%;border-radius:3px}
+  .ra{color:#e6e1f5;line-height:1.45}.ra u{text-decoration:none;color:#ff7a8e;font-weight:600}
+  #ana{padding:22px 2px 6px}#ana h2{font:800 24px/1.1 system-ui;margin:0 0 4px;letter-spacing:-.01em}#ana .sub{color:#a79fc0;font-size:12px;margin-bottom:16px;max-width:760px}
+  .ch{margin:0 0 14px}.ch h3{font:600 13px system-ui;margin:0 0 4px}.ch h3 small{color:#a79fc0;font-weight:400;margin-left:8px}
+  .cw{position:relative}.cw canvas{display:block}.cw .ov{position:absolute;left:0;top:0;cursor:pointer}.two{display:flex;gap:14px}
   select{background:#c4122f;color:#fff;border:0;border-radius:6px;padding:4px 6px}
 </style></head>
 <body>
-<div id="hud"><button id="mode">Walkthrough</button><button id="music"></button><button id="full" title="Look up in tall rooms, sway, rise in the climax, aerial finale">Full experience: off</button><button id="pp" style="display:none">&#10074;&#10074;</button><span id="info"></span><span id="legend"></span><b id="zone"></b></div>
-<div id="bar"><label>Speed <select id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="1.5">1.5x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option></select></label><input id="seek" type="range" min="0" value="0" step="0.05"><span id="time"></span></div>
+<div id="stage"><div id="insp"></div><div id="hud"><button id="mode">Walkthrough</button><button id="music"></button><button id="full" title="Look up in tall rooms, sway, rise in the climax, aerial finale">Full experience: off</button><button id="pp" style="display:none">&#10074;&#10074;</button><span id="info"></span><span id="legend"></span><b id="zone"></b></div>
+<div id="bar"><label>Speed <select id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="1.5">1.5x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option></select></label><input id="seek" type="range" min="0" value="0" step="0.05"><span id="time"></span></div></div>
+<div id="ana"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const DATA = __DATA__;
@@ -20,10 +31,11 @@ const W = DATA.width, segs = DATA.segments;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x10131c);
 scene.fog = new THREE.Fog(0x10131c, 80, 400);
-const cam = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 2000);
+const STAGE = document.getElementById("stage");
+const cam = new THREE.PerspectiveCamera(55, STAGE.clientWidth / STAGE.clientHeight, 0.1, 2000);
 const renderer = new THREE.WebGLRenderer({antialias: true});
-renderer.setSize(innerWidth, innerHeight);
-document.body.appendChild(renderer.domElement);
+renderer.setSize(STAGE.clientWidth, STAGE.clientHeight);
+STAGE.insertBefore(renderer.domElement, STAGE.firstChild);
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 0.9));
 const sun = new THREE.DirectionalLight(0xffffff, 0.8);
@@ -49,7 +61,7 @@ function box(w, h, d, m, x, y, z) {
 }
 
 const ZC = {intro: 0xffc98a, rhythm: 0x7fb2ff, harmony: 0xc89bff, climax: 0xff5a5a, outro: 0x9fd8c0, none: 0xffffff};
-const pulse = [];
+const pulse = [], groups = [];
 let climaxLights = 0;
 const pts = [];
 segs.forEach((s, idx) => {
@@ -92,6 +104,7 @@ segs.forEach((s, idx) => {
       pulse.push({l: pl, i: idx}); climaxLights++;
     }
   }
+  g.userData.seg = idx; groups.push(g);
   scene.add(g);
   pts.push(new THREE.Vector3(s.x0, 1.7, s.z0));
 });
@@ -190,7 +203,7 @@ function startMusic(withSound) {
 function stopMusic() {
   if (!music) return;
   music = false; playing = false; if (audio) audio.pause(); sound = false;
-  bar.style.display = "none"; ppBtn.style.display = "none"; zoneEl.textContent = "";
+  bar.style.display = "none"; ppBtn.style.display = "none"; zoneEl.textContent = ""; playT = -1; drawOv();
   cam.fov = 55; curFov = 55; cam.updateProjectionMatrix(); refreshBtns();
 }
 function togglePlay() {
@@ -218,6 +231,7 @@ function musicStep(dt) {
   seek.value = t; timeEl.textContent = fmt(t) + " / " + fmt(endT) +
     (DATA.song_seconds && DATA.song_seconds > endT + 1.5 ? "  (analysed part; song is " + fmt(DATA.song_seconds) + ")" : "");
   const d = distAt(t), P = pathAt(d), Q = pathAt(d + 4), s = segs[P.i];
+  follow(P.i, t);
   zoneEl.textContent = s.zone && s.zone !== "none" ? "Zone: " + s.zone : "";
   let dx = Q.x - P.x, dz = Q.z - P.z; const dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
   let hT = 1.7, lookY = 1.7, yaw = 0, lat = 0, fov = 55;
@@ -241,6 +255,201 @@ function musicStep(dt) {
   if (Math.abs(cam.fov - curFov) > 0.05) { cam.fov = curFov; cam.updateProjectionMatrix(); }
 }
 
+// ================= INSPECTOR: which music shaped the selected room =================
+const NOTE_N = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const noteName = m => NOTE_N[((Math.round(m) % 12) + 12) % 12] + (Math.floor(Math.round(m) / 12) - 1);
+const ZINFO = {
+  intro: ["first part of the song", "openness x0.3, half the ribs, soft warm light"],
+  rhythm: ["busy section with high note density", "extra ribs, spacing follows the beat"],
+  harmony: ["sustained section with lower note density", "two overlapping glass layers"],
+  climax: ["loudest stretch of the song", "height x1.4, leaning walls, spires, pulsing light"],
+  outro: ["closing part of the song", "height, openness and light fade out"],
+  none: ["zones are switched off", "no zone effects"]};
+const ZHEX = {intro: "#ffb454", rhythm: "#4f8cff", harmony: "#9b6bff", climax: "#ff2d55", outro: "#3fd6a0", none: "#cfd6e6"};
+const insp = document.getElementById("insp");
+let sel = -1, outline = null, playT = -1;
+const fmtT = s => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
+const row = (lab, val, p, res, c) => '<div class="r"><div class="rt"><span>' + lab + '</span><b>' + val + '</b></div><div class="bb"><i style="width:' +
+  Math.round(clamp(p, 0, 1) * 100) + '%;background:' + c + '"></i></div><div class="ra">' + res + '</div></div>';
+function showInsp(i) {
+  const s = segs[i], r = s.raw, n = s.norm || {}, b = s.base || {}, z = s.zone || "none", c = ZHEX[z];
+  let h = '<div class="ih" style="border-color:' + c + '"><b>Room ' + (i + 1) + ' of ' + segs.length + '</b><span>' + fmtT(s.start_time) + ' - ' +
+    fmtT(s.start_time + s.duration) + '</span><em style="background:' + c + '">' + z + '</em></div>';
+  if (r) {
+    const dh = b.height !== undefined && Math.abs(b.height - s.height) > 0.05, dro = b.ribs !== undefined && b.ribs !== s.ribs,
+          dop = b.openness !== undefined && Math.abs(b.openness - s.openness) > 0.005;
+    h += row("Pitch", noteName(r.pitch_midi) + " (MIDI " + r.pitch_midi.toFixed(1) + ")", n.pitch, "sets <u>height</u> " + s.height + " m" + (dh ? " (" + b.height + " before the " + z + " effect)" : ""), "#ff2d55");
+    h += row("Duration", s.duration + " s", s.duration / 6, "sets <u>length</u> " + s.length + " m (tempo " + DATA.tempo + " BPM, squeeze x" + (DATA.compression || 1) + ")", "#ff7a45");
+    h += row("Note density", r.onset_density.toFixed(1) + " notes/s", n.density, "sets <u>rib spacing</u> " + s.spacing + " m, " + s.ribs + " ribs" + (dro ? " (was " + b.ribs + ")" : ""), "#4f8cff");
+    h += row("Loudness", r.rms.toFixed(3) + " rms", n.energy, "sets <u>openness</u> " + Math.round(s.openness * 100) + "%" + (dop ? " (was " + Math.round(b.openness * 100) + "%)" : "") + ", walls " + Math.round((1 - 0.8 * s.openness) * 100) + "% solid", "#3fd6a0");
+    h += row("Brightness", Math.round(r.centroid) + " Hz", n.bright, "picks the <u>material</u>: " + s.material, "#ffb454");
+    h += row("Melody movement", ((s.move || 0) >= 0 ? "+" : "") + (s.move || 0).toFixed(2), Math.abs(s.move || 0) * 4, "bends the <u>path</u> " + ((s.turn_deg || 0) >= 0 ? "+" : "") + (s.turn_deg || 0) + " deg (heading " + Math.round(s.heading * 57.3) + " deg)", "#9b6bff");
+  }
+  h += '<div class="r"><div class="rt"><span>Song position</span><b style="color:' + c + '">' + z + '</b></div><div class="ra">' + ZINFO[z][0] +
+    '. Effect: ' + ZINFO[z][1] + '. Light level ' + s.light + '.</div></div>';
+  insp.innerHTML = h;
+}
+function select(i) {
+  if (i < 0 || i >= groups.length || i === sel) return;
+  if (outline && sel >= 0) groups[sel].remove(outline);
+  sel = i; const s = segs[i];
+  outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W + 0.8, s.height, s.length)), new THREE.LineBasicMaterial({color: 0xffffff}));
+  outline.position.y = s.height / 2; groups[i].add(outline);
+  showInsp(i); drawOv();
+}
+function follow(i, t) { playT = t; select(i); drawOv(); }
+const ray = new THREE.Raycaster(), mv = new THREE.Vector2(); let downAt = null;
+cv.addEventListener("mousedown", e => { downAt = [e.clientX, e.clientY]; });
+cv.addEventListener("mouseup", e => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+  const r = cv.getBoundingClientRect();
+  mv.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mv, cam);
+  const hit = ray.intersectObjects(groups, true)[0]; if (!hit) return;
+  let o = hit.object; while (o && o.userData.seg === undefined) o = o.parent;
+  if (o) select(o.userData.seg);
+});
+
+// ================= MUSICAL FEATURE ANALYSIS =================
+const V = DATA.viz, ana = document.getElementById("ana"), durT = V ? V.duration : endT, LM = 70, RM = 10;
+const DPR = Math.min(2, window.devicePixelRatio || 1), CHH = {wave: 84, beat: 84, pitch: 130, energy: 96, layers: 120, sect: 58}, charts = {};
+const lab = (x, t, y) => { x.fillStyle = "#a79fc0"; x.font = "11px system-ui"; x.fillText(t, 6, y); };
+function pair(parent, h) {
+  const wrap = document.createElement("div"); wrap.className = "cw";
+  const b = document.createElement("canvas"), o = document.createElement("canvas"); o.className = "ov";
+  wrap.appendChild(b); wrap.appendChild(o); parent.appendChild(wrap);
+  return {wrap: wrap, b: b, o: o, h: h, w: 0};
+}
+function fit(c, w) {
+  [c.b, c.o].forEach(cv => { cv.width = w * DPR; cv.height = c.h * DPR; cv.style.width = w + "px"; cv.style.height = c.h + "px"; });
+  c.bx = c.b.getContext("2d"); c.ox = c.o.getContext("2d");
+  c.bx.setTransform(DPR, 0, 0, DPR, 0, 0); c.ox.setTransform(DPR, 0, 0, DPR, 0, 0); c.w = w;
+}
+function dWave(x, w, h) {
+  const span = w - LM - RM, A = V.wave, n = A.length; lab(x, "Amplitude", h / 2 + 4);
+  for (let k = 0; k < n; k++) {
+    const t = (k + 0.5) / n * durT, z = segs.length ? (segs[segAt(t)].zone || "none") : "none", hh = Math.max(1, A[k] * h * 0.46);
+    x.globalAlpha = 0.85; x.fillStyle = ZHEX[z]; x.fillRect(LM + k * span / n, h / 2 - hh, Math.max(1, span / n - 0.6), hh * 2);
+  }
+  x.globalAlpha = 1;
+}
+function dBeat(x, w, h) {
+  const span = w - LM - RM, B = V.beats; lab(x, "Beats", h * 0.8);
+  if (B.length > 2) {
+    const bp = []; for (let i = 0; i < B.length - 1; i++) bp.push(60 / Math.max(0.05, B[i + 1] - B[i]));
+    const sm = bp.map((v, i) => { let a = 0, n = 0; for (let k = Math.max(0, i - 3); k <= Math.min(bp.length - 1, i + 3); k++) { a += bp[k]; n++; } return a / n; });
+    const lo = Math.min(...sm), hi = Math.max(...sm), rg = Math.max(hi - lo, 10);
+    x.strokeStyle = "#35c4e0"; x.lineWidth = 1.6; x.beginPath();
+    sm.forEach((v, i) => { const px = LM + B[i] / durT * span, py = 18 + (1 - (v - lo) / rg) * (h * 0.3); if (i) x.lineTo(px, py); else x.moveTo(px, py); });
+    x.stroke(); x.fillStyle = "#35c4e0"; x.fillText("local tempo, average " + Math.round(sm.reduce((a, b) => a + b) / sm.length) + " BPM", LM + 4, 12);
+  }
+  B.forEach((b, i) => {
+    const px = LM + b / durT * span, big = i % 4 === 0;
+    x.strokeStyle = big ? "#ff5c7c" : "rgba(255,255,255,.35)"; x.lineWidth = big ? 2 : 1;
+    x.beginPath(); x.moveTo(px, h * (big ? 0.52 : 0.64)); x.lineTo(px, h - 4); x.stroke();
+  });
+}
+function dPitch(x, w, h) {
+  const span = w - LM - RM, P = V.pitch, vals = P.filter(v => v !== null); lab(x, "Pitch", 14);
+  if (!vals.length) { x.fillText("no clear pitch found", LM, h / 2); return; }
+  const sv = vals.slice().sort((a, b) => a - b), lo = Math.floor(sv[Math.floor(sv.length * 0.02)]) - 1, hi = Math.ceil(sv[Math.min(sv.length - 1, Math.floor(sv.length * 0.98))]) + 1;
+  const Y = m => h - 8 - (Math.min(hi, Math.max(lo, m)) - lo) / (hi - lo) * (h - 16);
+  for (let m = Math.ceil(lo); m <= hi; m++) if (m % 12 === 0) {
+    x.strokeStyle = "rgba(255,255,255,.1)"; x.beginPath(); x.moveTo(LM, Y(m)); x.lineTo(w - RM, Y(m)); x.stroke();
+    x.fillStyle = "#a79fc0"; x.fillText(noteName(m), LM - 32, Y(m) + 4);
+  }
+  x.strokeStyle = "#ffc233"; x.lineWidth = 2; x.shadowColor = "#ffc233"; x.shadowBlur = 8; x.beginPath(); let pen = false;
+  P.forEach((v, k) => { if (v === null) { pen = false; return; } const px = LM + (k + 0.5) / P.length * span, py = Y(v); if (pen) x.lineTo(px, py); else x.moveTo(px, py); pen = true; });
+  x.stroke(); x.shadowBlur = 0;
+}
+function dHist(x, w, h) {
+  const cnt = new Array(12).fill(0); V.pitch.forEach(v => { if (v !== null) cnt[((Math.round(v) % 12) + 12) % 12]++; });
+  const mx = Math.max(1, ...cnt), bw = (w - 20) / 12;
+  cnt.forEach((c, i) => {
+    const bh = c / mx * (h - 34); x.fillStyle = "hsl(" + (350 - i * 14) + ",85%,60%)"; x.fillRect(10 + i * bw + 2, h - 18 - bh, bw - 4, bh);
+    x.fillStyle = "#a79fc0"; x.font = "10px system-ui"; x.fillText(NOTE_N[i], 10 + i * bw + bw / 2 - 5, h - 5);
+  });
+  x.fillStyle = "#cfd6e6"; x.font = "11px system-ui"; x.fillText("Pitch distribution (notes used)", 10, 12);
+}
+function dEnergy(x, w, h) {
+  const span = w - LM - RM, E = V.energy; lab(x, "Energy", 14);
+  const gr = x.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, "rgba(255,45,85,.9)"); gr.addColorStop(1, "rgba(155,107,255,.15)");
+  x.fillStyle = gr; x.beginPath(); x.moveTo(LM, h - 4);
+  E.forEach((v, k) => x.lineTo(LM + (k + 0.5) / E.length * span, h - 4 - v * (h - 14)));
+  x.lineTo(w - RM, h - 4); x.closePath(); x.fill();
+  x.strokeStyle = "rgba(255,255,255,.85)"; x.setLineDash([4, 3]); x.lineWidth = 1.3;
+  segs.forEach(s => { if (!s.norm) return; const y = h - 4 - s.norm.energy * (h - 14), x0 = LM + s.start_time / durT * span, x1 = LM + (s.start_time + s.duration) / durT * span; x.beginPath(); x.moveTo(x0, y); x.lineTo(x1, y); x.stroke(); });
+  x.setLineDash([]);
+}
+const BANDS = [["Bass", "#ff4fa0"], ["Low-mid", "#a15cff"], ["Mid", "#4f7cff"], ["High-mid", "#35d0e0"], ["Treble", "#3fe08a"]];
+function dLayers(x, w, h) {
+  const span = w - LM - RM, rh = (h - 4) / 5; x.font = "11px system-ui";
+  BANDS.forEach((b, r) => {
+    const R = V.bands[r], cw = span / R.length;
+    R.forEach((v, k) => { x.globalAlpha = 0.08 + 0.92 * Math.pow(v, 1.3); x.fillStyle = b[1]; x.fillRect(LM + k * cw, 2 + r * rh, cw + 0.6, rh - 1); });
+    x.globalAlpha = 1; x.fillStyle = b[1]; x.fillText(b[0], 6, 2 + r * rh + rh / 2 + 4);
+  });
+}
+function dSect(x, w, h) {
+  const span = w - LM - RM; lab(x, "Sections", h / 2 - 2); let i = 0;
+  while (i < segs.length) {
+    let j = i; const z = segs[i].zone || "none"; while (j + 1 < segs.length && (segs[j + 1].zone || "none") === z) j++;
+    const x0 = LM + segs[i].start_time / durT * span, x1 = LM + (segs[j].start_time + segs[j].duration) / durT * span;
+    x.globalAlpha = 0.88; x.fillStyle = ZHEX[z]; x.fillRect(x0 + 1, 4, x1 - x0 - 2, h - 24); x.globalAlpha = 1;
+    if (x1 - x0 > 52) { x.fillStyle = "#10131c"; x.font = "600 11px system-ui"; x.fillText(z.toUpperCase(), x0 + 8, h / 2 - 5); }
+    i = j + 1;
+  }
+  x.strokeStyle = "rgba(0,0,0,.3)"; segs.forEach(s => { const px = LM + s.start_time / durT * span; x.beginPath(); x.moveTo(px, 4); x.lineTo(px, h - 20); x.stroke(); });
+  x.fillStyle = "#a79fc0"; x.font = "10px system-ui"; const step = durT > 180 ? 30 : durT > 60 ? 10 : 5;
+  for (let t = 0; t <= durT; t += step) x.fillText(fmtT(t), LM + t / durT * span, h - 4);
+}
+function drawOv() {
+  if (!V) return;
+  Object.keys(charts).forEach(k => {
+    const c = charts[k], x = c.ox; if (!x) return; x.clearRect(0, 0, c.w, c.h);
+    if (k === "hist") {
+      if (sel >= 0 && segs[sel].raw) { const pc = ((Math.round(segs[sel].raw.pitch_midi) % 12) + 12) % 12, bw = (c.w - 20) / 12; x.strokeStyle = "#fff"; x.lineWidth = 2; x.strokeRect(10 + pc * bw, 16, bw, c.h - 34); }
+      return;
+    }
+    const span = c.w - LM - RM;
+    if (sel >= 0) {
+      const s = segs[sel], x0 = LM + s.start_time / durT * span, x1 = LM + (s.start_time + s.duration) / durT * span;
+      x.fillStyle = "rgba(255,255,255,.14)"; x.fillRect(x0, 0, Math.max(2, x1 - x0), c.h); x.fillStyle = "rgba(255,255,255,.85)"; x.fillRect(x0, 0, Math.max(2, x1 - x0), 2);
+    }
+    if (playT >= 0) { const px = LM + playT / durT * span; x.strokeStyle = "#fff"; x.lineWidth = 1.5; x.beginPath(); x.moveTo(px, 0); x.lineTo(px, c.h); x.stroke(); }
+  });
+}
+function drawAll() {
+  if (!V) return;
+  const D = {wave: dWave, beat: dBeat, pitch: dPitch, energy: dEnergy, layers: dLayers, sect: dSect, hist: dHist};
+  Object.keys(charts).forEach(k => {
+    const c = charts[k]; fit(c, k === "hist" ? 250 : Math.max(200, Math.floor(c.wrap.parentElement.clientWidth)));
+    c.bx.clearRect(0, 0, c.w, c.h); D[k](c.bx, c.w, c.h);
+  });
+  drawOv();
+}
+function buildAna() {
+  if (!V) { ana.style.display = "none"; return; }
+  ana.innerHTML = '<h2>Musical Feature Analysis</h2><div class="sub">What the music contains, and what the pavilion does with it. Click any chart to inspect that moment. The white band marks the selected room, and the line follows the walk.</div>';
+  [["wave", "Waveform", "amplitude over time, coloured by section"], ["beat", "Beat detection", "detected beats (red = every fourth) and local tempo"],
+   ["pitch", "Pitch", "contour over time, and which notes the song uses"], ["energy", "Energy and intensity", "loudness over time; dashed steps are what each room receives"],
+   ["layers", "Musical layers", "five frequency bands, bass to treble"], ["sect", "Section detection", "the five zones found in the song"]].forEach(d => {
+    const box = document.createElement("div"); box.className = "ch"; box.innerHTML = '<h3>' + d[1] + '<small>' + d[2] + '</small></h3>'; ana.appendChild(box);
+    if (d[0] === "pitch") {
+      const rw = document.createElement("div"); rw.className = "two"; box.appendChild(rw);
+      const l = document.createElement("div"), r = document.createElement("div"); l.style.flex = "1"; l.style.minWidth = "0"; r.style.width = "250px"; rw.appendChild(l); rw.appendChild(r);
+      charts.pitch = pair(l, CHH.pitch); charts.hist = pair(r, CHH.pitch);
+    } else charts[d[0]] = pair(box, CHH[d[0]]);
+  });
+  Object.keys(charts).forEach(k => {
+    if (k === "hist") return;
+    charts[k].o.addEventListener("click", ev => { const c = charts[k], t = (ev.offsetX - LM) / (c.w - LM - RM) * durT; if (t >= 0 && t <= durT) select(segAt(t)); });
+  });
+}
+insp.innerHTML = '<div class="r"><b>Select a room</b><div class="ra">Click any room in the model, or any point on the charts below, to see which musical information shaped its geometry. While a walk is playing, this panel follows you.</div></div>';
+buildAna(); drawAll(); setTimeout(drawAll, 400);
+let rzT = null; addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(drawAll, 120); });
+
 let last = performance.now();
 function loop(now) {
   const dt = (now - last) / 1000; last = now;
@@ -262,8 +471,8 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 addEventListener("resize", () => {
-  cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  cam.aspect = STAGE.clientWidth / STAGE.clientHeight; cam.updateProjectionMatrix();
+  renderer.setSize(STAGE.clientWidth, STAGE.clientHeight);
 });
 requestAnimationFrame(loop);
 </script></body></html>
