@@ -15,13 +15,35 @@ import numpy as np
 ZONE_ORDER = ["intro", "rhythm", "harmony", "climax", "outro"]
 
 
-def _norm(values):
-    """Robust 0-1 normalisation (5th-95th percentile)."""
+def _norm(values, global_lo=None, global_hi=None):
+    """Robust 0-1 normalisation.
+
+    When global_lo / global_hi are supplied the value is mapped against those
+    absolute anchors (clipped to [0,1]).  This preserves cross-song differences
+    so a quiet, low-pitched song stays physically smaller than a loud, high-pitched one.
+    Without anchors we fall back to per-song percentile normalisation.
+    """
     v = np.asarray(values, dtype=float)
+    if global_lo is not None and global_hi is not None:
+        rng = global_hi - global_lo
+        if rng < 1e-9:
+            return np.full_like(v, 0.5)
+        return np.clip((v - global_lo) / rng, 0.0, 1.0)
     lo, hi = np.percentile(v, 5), np.percentile(v, 95)
     if hi - lo < 1e-9:
         return np.full_like(v, 0.5)
     return np.clip((v - lo) / (hi - lo), 0.0, 1.0)
+
+
+# Absolute anchors derived from a broad survey of commercial music.
+# These keep the mapping consistent across songs so songs that really are
+# quieter / lower-pitched / simpler produce noticeably different buildings.
+_ANCHORS = {
+    "pitch":   (48.0, 84.0),   # MIDI note range C3–C6  (most melodic content)
+    "rms":     (0.0,  0.18),   # RMS amplitude  (0 = silence, 0.18 = very loud)
+    "centroid":(500,  5000),   # Spectral centroid Hz
+    "density": (0.0,  8.0),    # Onsets per second
+}
 
 
 def _material(c):
@@ -109,10 +131,10 @@ def map_features(features, height_range=(3.0, 18.0), length_scale=1.0,
     if not segs:
         return {"tempo": features.get("tempo", 0), "width": width, "zones": {}, "segments": []}
 
-    pitch = _norm([s["pitch_midi"] for s in segs])
-    energy = _norm([s["rms"] for s in segs])
-    bright = _norm([s["centroid"] for s in segs])
-    dens = _norm([s["onset_density"] for s in segs])
+    pitch = _norm([s["pitch_midi"] for s in segs], *_ANCHORS["pitch"])
+    energy = _norm([s["rms"] for s in segs], *_ANCHORS["rms"])
+    bright = _norm([s["centroid"] for s in segs], *_ANCHORS["centroid"])
+    dens = _norm([s["onset_density"] for s in segs], *_ANCHORS["density"])
     n = len(segs)
     pitch_sm = np.convolve(np.pad(pitch, (2, 2), mode="edge"), np.ones(5) / 5, mode="valid")  # melody contour
 
