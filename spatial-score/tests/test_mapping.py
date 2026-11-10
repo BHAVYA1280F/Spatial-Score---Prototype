@@ -8,10 +8,10 @@ def test_mapping_shapes_and_ranges():
     assert len(segs) == 28
     for s in segs:
         assert 1.5 <= s["height"] <= 18 * 1.4 + 0.1
-        assert 2 <= s["length"] <= 12
+        assert 0.05 <= s["length"] <= 12
         assert 0 <= s["openness"] <= 1
         assert s["material"] in {"concrete", "wood", "glass"}
-        assert s["ribs"] >= 2
+        assert s["ribs"] >= 0
 
 
 def test_empty():
@@ -53,3 +53,16 @@ def test_demo_has_chart_data():
     v = demo_features()["viz"]
     assert len(v["wave"]) == len(v["energy"]) == len(v["pitch"]) == 300
     assert len(v["bands"]) == 5 and v["beats"]
+
+
+def test_pavilion_dimensions():
+    arch = map_features(demo_features())
+    segs = arch["segments"]
+    total = sum(s["length"] for s in segs)
+    assert 18 <= total <= 48
+    for s in segs:
+        assert 1.8 <= s["height"] <= 12
+        assert 5 <= s["width"] <= 13
+        assert 0.7 <= s["arch_p"] <= 1.5
+        assert abs(s["twist"]) <= 70
+        assert s["pattern"]

@@ -94,7 +94,7 @@ if features:
     html = (ROOT / "viewer" / "scene.html").read_text(encoding="utf-8")
     html = html.replace("__DATA__", json.dumps(arch)).replace("__AUDIO__", json.dumps(audio_uri))
     st.markdown('<div class="eyebrow reveal">The pavilion</div>', unsafe_allow_html=True)
-    components.html(html, height=640 + (920 if arch.get("viz") else 0))
+    components.html(html, height=640 + 1080 + (920 if arch.get("viz") else 0))
     st.caption("Walkthrough is silent. Walk with music plays the song. Both follow the song's timeline, and Full experience works in both.")
     st.download_button("Download parameters (JSON)", json.dumps(arch, indent=2), "spatial_score.json", "application/json")
     with st.expander("Segment data"):

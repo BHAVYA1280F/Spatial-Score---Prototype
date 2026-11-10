@@ -14,7 +14,7 @@
   .r{margin:10px 0}.rt{display:flex;justify-content:space-between;gap:8px;color:#a79fc0}.rt b{color:#fff;text-align:right}
   .bb{height:4px;background:rgba(255,255,255,.1);border-radius:3px;margin:4px 0}.bb i{display:block;height:100%;border-radius:3px}
   .ra{color:#e6e1f5;line-height:1.45}.ra u{text-decoration:none;color:#ff7a8e;font-weight:600}
-  #ana{padding:22px 2px 6px}#ana h2{font:800 24px/1.1 system-ui;margin:0 0 4px;letter-spacing:-.01em}#ana .sub{color:#a79fc0;font-size:12px;margin-bottom:16px;max-width:760px}
+  #ana,#lay{padding:22px 2px 6px}#ana h2,#lay h2{font:800 24px/1.1 system-ui;margin:0 0 4px;letter-spacing:-.01em}#ana .sub,#lay .sub{color:#a79fc0;font-size:12px;margin-bottom:16px;max-width:760px}
   .ch{margin:0 0 14px}.ch h3{font:600 13px system-ui;margin:0 0 4px}.ch h3 small{color:#a79fc0;font-weight:400;margin-left:8px}
   .cw{position:relative}.cw canvas{display:block}.cw .ov{position:absolute;left:0;top:0;cursor:pointer}.two{display:flex;gap:14px}
   select{background:#c4122f;color:#fff;border:0;border-radius:6px;padding:4px 6px}
@@ -22,6 +22,7 @@
 <body>
 <div id="stage"><div id="insp"></div><div id="hud"><button id="mode">Walkthrough</button><button id="music"></button><button id="full" title="Look up in tall rooms, sway, rise in the climax, aerial finale">Full experience: off</button><button id="pp" style="display:none">&#10074;&#10074;</button><span id="info"></span><span id="legend"></span><b id="zone"></b></div>
 <div id="bar"><label>Speed <select id="speed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="1.5">1.5x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option></select></label><input id="seek" type="range" min="0" value="0" step="0.05"><span id="time"></span></div></div>
+<div id="lay"></div>
 <div id="ana"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -36,81 +37,265 @@ const cam = new THREE.PerspectiveCamera(55, STAGE.clientWidth / STAGE.clientHeig
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(STAGE.clientWidth, STAGE.clientHeight);
 STAGE.insertBefore(renderer.domElement, STAGE.firstChild);
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 0.9));
-const sun = new THREE.DirectionalLight(0xffffff, 0.8);
-sun.position.set(40, 80, 30);
-scene.add(sun);
-scene.add(new THREE.GridHelper(600, 120, 0x2a3350, 0x1b2133));
-
-const BASE = {
-  concrete: {color: 0x9a9a9a, rough: 0.9, op: 1},
-  wood:     {color: 0xb07d45, rough: 0.7, op: 1},
-  glass:    {color: 0x9fd8ee, rough: 0.1, op: 0.45},
-};
-function mat(name, opacity) {
-  const b = BASE[name] || BASE.concrete;
-  const o = Math.min(b.op, opacity);
-  return new THREE.MeshStandardMaterial({
-    color: b.color, roughness: b.rough, transparent: o < 1, opacity: o, side: THREE.DoubleSide});
-}
-function box(w, h, d, m, x, y, z) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
-  mesh.position.set(x, y, z);
-  return mesh;
-}
-
+// ================= ENVIRONMENT, TEXTURES AND THE PAVILION =================
+const cl = (v, a, b) => Math.min(b, Math.max(a, v));
 const ZC = {intro: 0xffc98a, rhythm: 0x7fb2ff, harmony: 0xc89bff, climax: 0xff5a5a, outro: 0x9fd8c0, none: 0xffffff};
-const pulse = [], groups = [];
-let climaxLights = 0;
-const pts = [];
-segs.forEach((s, idx) => {
-  const g = new THREE.Group();
-  g.position.set(s.x, 0, s.z);
-  g.rotation.y = s.heading;
-  const L = s.length, H = s.height, zone = s.zone || "none", tilt = s.tilt || 0;
-  const light = s.light !== undefined ? s.light : 0.6;
-  const wallOp = 1 - 0.8 * s.openness;
-  g.add(box(W, 0.3, L, mat(s.material, 1), 0, 0.15, 0));
-  const lean = (H / 2) * Math.sin(tilt);                       // climax walls lean outward
-  const wl = box(0.25, H, L, mat(s.material, wallOp), -W / 2 - lean, H / 2, 0); wl.rotation.z = tilt;
-  const wr = box(0.25, H, L, mat(s.material, wallOp), W / 2 + lean, H / 2, 0); wr.rotation.z = -tilt;
-  g.add(wl); g.add(wr);
-  if (zone !== "climax" && s.openness < 0.6) g.add(box(W, 0.25, L, mat(s.material, 1 - s.openness), 0, H, 0));
-  const fin = mat("concrete", 1);
-  for (let i = 0; i < s.ribs; i++) {
-    const z = -L / 2 + (i + 0.5) * (L / s.ribs);
-    [-1, 1].forEach(side => {
-      if (zone === "climax") {                                  // tapered spires
-        const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.3, H * 1.15, 6), fin);
-        sp.position.set(side * (W / 2 + 0.25 + lean), H * 0.575, z);
-        g.add(sp);
-      } else g.add(box(0.2, H * 1.05, 0.2, fin, side * (W / 2 + 0.25), H * 0.525, z));
-    });
+const ZL = {intro: 0xffb36b, rhythm: 0xffc27a, harmony: 0xd9b0ff, climax: 0xff6a3d, outro: 0x8fe8c0, none: 0xffc27a};
+const pulse = [], groups = [], pts = [];
+let rs_ = 11; const rnd = () => (rs_ = (rs_ * 16807) % 2147483647) / 2147483647;
+function cv2(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return [c, c.getContext("2d")]; }
+function mkTex(c, rx, ry, col) {
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 4;
+  if (col) t.encoding = THREE.sRGBEncoding; return t;
+}
+function cTimber() {
+  const [c, g] = cv2(256, 256); g.fillStyle = "#c68a4b"; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 230; i++) {
+    const y = rnd() * 256, a = 0.06 + rnd() * 0.2; g.strokeStyle = rnd() > 0.5 ? "rgba(90,50,15," + a + ")" : "rgba(255,225,160," + a + ")"; g.lineWidth = 0.6 + rnd() * 1.8;
+    g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= 256; x += 32) g.lineTo(x, y + Math.sin(x * 0.03 + i) * 3 + (rnd() - 0.5) * 2); g.stroke();
   }
-  for (let k = 1; k <= (s.layers || 0); k++) {                  // harmony: overlapping layers
-    const off = (k % 2 ? 1 : -1) * (1.0 + 0.7 * k), hk = H * (0.5 + 0.35 * k), gm = mat("glass", 0.4);
-    g.add(box(0.15, hk, L * 0.85, gm, off, hk / 2, 0));
-    g.add(box(W * 0.7, 0.12, L * 0.7, gm, off * 0.4, hk, 0));
+  for (let k = 0; k < 3; k++) { const x = rnd() * 256, y = rnd() * 256; g.strokeStyle = "rgba(70,35,10,.35)"; for (let r = 3; r < 14; r += 3) { g.beginPath(); g.ellipse(x, y, r * 2.2, r * 0.8, 0, 0, 6.3); g.stroke(); } }
+  return c;
+}
+function cShingle() {
+  const [c, g] = cv2(256, 256); g.fillStyle = "#6a2616"; g.fillRect(0, 0, 256, 256);
+  for (let row = 0; row < 20; row++) for (let col = -1; col < 17; col++) {
+    const x = col * 16 + (row % 2 ? 8 : 0), y = row * 13, k = 0.75 + rnd() * 0.5;
+    g.fillStyle = "rgb(" + Math.round(178 * k) + "," + Math.round(84 * k) + "," + Math.round(50 * k) + ")";
+    g.beginPath(); g.arc(x + 8, y, 11.5, 0, Math.PI); g.lineTo(x - 3.5, y - 13); g.lineTo(x + 19.5, y - 13); g.closePath(); g.fill();
+    g.strokeStyle = "rgba(35,10,5,.6)"; g.lineWidth = 1; g.beginPath(); g.arc(x + 8, y, 11.5, 0, Math.PI); g.stroke();
   }
-  const base = new THREE.Color(ZC[zone]).multiplyScalar(0.25 + 0.75 * light);   // light strip
-  const sm = new THREE.MeshBasicMaterial({color: base});
-  g.add(box(W * 0.5, 0.12, L * 0.9, sm, 0, Math.max(1, H - 0.25), 0));
-  if (zone === "climax") {
-    pulse.push({m: sm, base: base, i: idx});
-    if (climaxLights < 8 && idx % 2 === 0) {
-      const pl = new THREE.PointLight(0xff6a3d, 1.2, 30);
-      pl.position.set(0, H * 0.8, 0); g.add(pl);
-      pulse.push({l: pl, i: idx}); climaxLights++;
+  return c;
+}
+function cBamboo() {
+  const [c, g] = cv2(256, 64); g.fillStyle = "#c9b14a"; g.fillRect(0, 0, 256, 64);
+  for (let i = 0; i < 60; i++) { g.strokeStyle = "rgba(90,100,30," + (0.05 + rnd() * 0.15) + ")"; g.beginPath(); g.moveTo(0, rnd() * 64); g.lineTo(256, rnd() * 64); g.stroke(); }
+  [0, 90, 180].forEach(x => { g.fillStyle = "rgba(70,60,20,.7)"; g.fillRect(x, 0, 5, 64); });
+  return c;
+}
+function cNoise(base, spread, dots) {
+  const [c, g] = cv2(256, 256); g.fillStyle = base; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < dots; i++) { const v = Math.round(128 + (rnd() - 0.5) * spread); g.fillStyle = "rgba(" + v + "," + v + "," + v + ",.35)"; g.fillRect(rnd() * 256, rnd() * 256, 1 + rnd() * 3, 1 + rnd() * 3); }
+  return c;
+}
+function cPave() {
+  const [c, g] = cv2(512, 512); g.fillStyle = "#3b404c"; g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { const k = 0.88 + rnd() * 0.24; g.fillStyle = "rgb(" + Math.round(62 * k) + "," + Math.round(66 * k) + "," + Math.round(78 * k) + ")"; g.fillRect(i * 64 + 1, j * 64 + 1, 62, 62); }
+  g.strokeStyle = "rgba(210,190,150,.22)"; g.lineWidth = 6; g.beginPath(); g.arc(160, 330, 150, 0, 6.3); g.stroke(); g.beginPath(); g.arc(420, 120, 90, 0, 6.3); g.stroke();
+  return c;
+}
+function cFrit() {
+  const [c, g] = cv2(128, 128); g.fillStyle = "#cfeaf7"; g.fillRect(0, 0, 128, 128);
+  for (let x = 4; x < 128; x += 8) for (let y = 4; y < 128; y += 8) { g.fillStyle = "rgba(255,255,255,.8)"; g.beginPath(); g.arc(x, y, 1.6, 0, 6.3); g.fill(); }
+  return c;
+}
+function cGlow() {
+  const [c, g] = cv2(128, 128), r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(0.35, "rgba(255,255,255,.45)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 128, 128); return c;
+}
+function cWindows() {
+  const [c, g] = cv2(128, 256); g.fillStyle = "#0c1224"; g.fillRect(0, 0, 128, 256);
+  for (let y = 6; y < 250; y += 10) for (let x = 6; x < 120; x += 10) if (rnd() > 0.45) { g.fillStyle = rnd() > 0.2 ? "#ffd58a" : "#bfe0ff"; g.fillRect(x, y, 5, 6); }
+  return c;
+}
+function cSky() {
+  const [c, g] = cv2(8, 512), gr = g.createLinearGradient(0, 0, 0, 512);
+  [[0, "#02040c"], [0.22, "#07123a"], [0.38, "#1e2f70"], [0.46, "#7d4a5c"], [0.495, "#e39a5e"], [0.51, "#1a1428"], [1, "#0a0912"]].forEach(s => gr.addColorStop(s[0], s[1]));
+  g.fillStyle = gr; g.fillRect(0, 0, 8, 512); return c;
+}
+const TX = {timber: mkTex(cTimber(), 1, 1, true), shingle: mkTex(cShingle(), 1, 1, true), bamboo: mkTex(cBamboo(), 6, 1, true), concrete: mkTex(cNoise("#b9b6ae", 90, 900), 1, 1, true),
+  pave: mkTex(cPave(), 230, 230, true), frit: mkTex(cFrit(), 6, 6, true), glow: new THREE.CanvasTexture(cGlow()), win: mkTex(cWindows(), 1, 1, true)};
+const DS = THREE.DoubleSide;
+const M = {
+  wood: new THREE.MeshStandardMaterial({map: TX.timber, bumpMap: TX.timber, bumpScale: 0.6, roughness: 0.6, side: DS}),
+  concrete: new THREE.MeshStandardMaterial({map: TX.concrete, bumpMap: TX.concrete, bumpScale: 0.8, roughness: 0.92, side: DS}),
+  glass: new THREE.MeshStandardMaterial({color: 0xb5e4f5, transparent: true, opacity: 0.5, roughness: 0.08, metalness: 0.2, side: DS}),
+  glass2: new THREE.MeshStandardMaterial({map: TX.frit, color: 0xdff3ff, transparent: true, opacity: 0.28, roughness: 0.1, metalness: 0.1, side: DS, depthWrite: false}),
+  fabric: new THREE.MeshStandardMaterial({color: 0xffe2b8, emissive: 0xff9a4a, emissiveIntensity: 0.6, transparent: true, opacity: 0.55, roughness: 0.95, side: DS, depthWrite: false}),
+  shingle: new THREE.MeshStandardMaterial({map: TX.shingle, bumpMap: TX.shingle, bumpScale: 1.2, roughness: 0.7, side: DS}),
+  bamboo: new THREE.MeshStandardMaterial({map: TX.bamboo, bumpMap: TX.bamboo, bumpScale: 0.5, roughness: 0.55, emissive: 0x3a2a08, emissiveIntensity: 0.5}),
+  steel: new THREE.MeshStandardMaterial({color: 0x9aa3ad, metalness: 0.8, roughness: 0.35}),
+  plinth: new THREE.MeshStandardMaterial({map: TX.concrete, color: 0x9a97a0, roughness: 0.9, side: DS}),
+  petal: new THREE.MeshStandardMaterial({map: TX.timber, bumpMap: TX.timber, bumpScale: 0.5, roughness: 0.5, side: DS})};
+const rmC = {};
+function rm(kind, zone, light) {
+  const key = kind + zone + Math.round(light * 5); if (rmC[key]) return rmC[key];
+  const m = (M[kind] || M.wood).clone(); m.emissive = new THREE.Color(ZL[zone] || 0xffc27a); m.emissiveIntensity = 0.06 + 0.3 * light; return (rmC[key] = m);
+}
+
+// ---- night environment: dusk sky, stars, moon, skyline, plaza ----
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(900, 24, 16), new THREE.MeshBasicMaterial({map: mkTex(cSky(), 1, 1, true), side: THREE.BackSide, fog: false, depthWrite: false})));
+{
+  const sp = []; for (let i = 0; i < 700; i++) { const u = rnd() * 6.283, v = 0.05 + rnd() * 1.4; sp.push(Math.cos(u) * Math.cos(v) * 850, Math.sin(v) * 850, Math.sin(u) * Math.cos(v) * 850); }
+  const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
+  scene.add(new THREE.Points(sg, new THREE.PointsMaterial({size: 2.2, sizeAttenuation: false, color: 0xffffff, opacity: 0.8, transparent: true, fog: false})));
+  const moon = new THREE.Sprite(new THREE.SpriteMaterial({map: TX.glow, color: 0xfff1c8, fog: false, depthWrite: false})); moon.position.set(-420, 520, -600); moon.scale.set(90, 90, 1); scene.add(moon);
+  for (let i = 0; i < 44; i++) {
+    const a = rnd() * 6.283, r = 240 + rnd() * 110, w = 14 + rnd() * 14, h = 25 + rnd() * 80, wt = TX.win.clone(); wt.needsUpdate = true; wt.repeat.set(w / 14, h / 28);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshBasicMaterial({map: wt, color: 0x9aa6c8})); b.position.set(Math.cos(a) * r, h / 2, Math.sin(a) * r); scene.add(b);
+  }
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), new THREE.MeshStandardMaterial({map: TX.pave, color: 0x9aa0b0, roughness: 0.85}));
+  ground.rotation.x = -Math.PI / 2; scene.add(ground);
+}
+scene.fog = new THREE.FogExp2(0x1a2140, 0.0018);
+scene.add(new THREE.HemisphereLight(0x6f86c8, 0x3a2a24, 0.5));
+{ const moonL = new THREE.DirectionalLight(0x8fa8ff, 0.4); moonL.position.set(-60, 120, 80); scene.add(moonL); }
+
+// ---- parametric pavilion: spine, profiles, arch cross-section ----
+const HAS = segs.length > 0, CUM = []; let TOT_L = 0;
+segs.forEach(s => { CUM.push(TOT_L); TOT_L += s.length; });
+const spine = HAS ? new THREE.CatmullRomCurve3(segs.map(s => new THREE.Vector3(s.x0, 0, s.z0)).concat([new THREE.Vector3(
+  segs[segs.length - 1].x0 + Math.sin(segs[segs.length - 1].heading) * segs[segs.length - 1].length, 0,
+  segs[segs.length - 1].z0 + Math.cos(segs[segs.length - 1].heading) * segs[segs.length - 1].length)])) : null;
+function smooth(arr, w) { return arr.map((_, i) => { let a = 0, n = 0; for (let k = i - w; k <= i + w; k++) if (k >= 0 && k < arr.length) { a += arr[k]; n++; } return a / n; }); }
+const PH = smooth(segs.map(s => s.height), 2), PW = smooth(segs.map(s => s.width || 8), 2), PP = smooth(segs.map(s => s.arch_p || 1), 2);
+function segIdx(d) { let i = 0; for (let k = 0; k < segs.length; k++) { if (CUM[k] <= d) i = k; else break; } return i; }
+function prof(A, d) {
+  const n = A.length; if (n === 1) return A[0];
+  let i = 0; while (i < n - 1 && CUM[i + 1] + segs[i + 1].length / 2 <= d) i++;
+  const c0 = CUM[i] + segs[i].length / 2; if (i === n - 1 || d <= c0 && i === 0) return A[i];
+  const c1 = CUM[i + 1] + segs[i + 1].length / 2; let u = cl((d - c0) / Math.max(1e-6, c1 - c0), 0, 1); u = u * u * (3 - 2 * u);
+  return A[i] + (A[i + 1] - A[i]) * u;
+}
+function taper(d) { const x = cl(Math.min(d, TOT_L - d) / 4, 0, 1); return x * x * (3 - 2 * x); }
+const hAt = d => prof(PH, d) * (0.58 + 0.42 * taper(d)), wAt = d => prof(PW, d) * (0.6 + 0.4 * taper(d)), pAt = d => prof(PP, d);
+const frC = new Map();
+function fr(d) {
+  d = cl(d, 0, TOT_L); const key = Math.round(d * 40); let f = frC.get(key); if (f) return f;
+  const u = d / TOT_L, p = spine.getPointAt(u), t = spine.getTangentAt(u), L = Math.hypot(t.x, t.z) || 1;
+  f = {px: p.x, pz: p.z, tx: t.x / L, tz: t.z / L, nx: -t.z / L, nz: t.x / L}; frC.set(key, f); return f;
+}
+function sec(d, a) {   // point on the arch at station d (a: 0 left foot ... 1 right foot), outward normal R, along-spine B
+  const f = fr(d), H = hAt(d), Wd = wAt(d) / 2, pp = pAt(d), al = Math.PI * a, sn = Math.max(1e-4, Math.sin(al)), cs = Math.cos(al);
+  const x = -Wd * cs, y = H * Math.pow(sn, pp), dx = Wd * sn, dy = H * pp * Math.pow(sn, pp - 1) * cs, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+  return {p: [f.px + f.nx * x, y, f.pz + f.nz * x], R: [f.nx * nx, ny, f.nz * nx], B: [f.tx, 0, f.tz]};
+}
+
+// ---- geometry builders (plain arrays, then one BufferGeometry per group) ----
+const G0 = () => ({P: [], I: [], U: []});
+function mkMesh(G, mat, parent) {
+  if (!G.I.length) return null; if (typeof CHK !== "undefined") CHK.push(G);
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(G.P, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(G.U, 2));
+  g.setIndex(G.I); g.computeVertexNormals(); const m = new THREE.Mesh(g, mat); parent.add(m); return m;
+}
+function ribbon(G, P, Rs, Ts, w, th, u0) {
+  const base = G.P.length / 3, n = P.length, cs = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
+  for (let k = 0; k < n; k++) cs.forEach((c, m) => {
+    G.P.push(P[k][0] + Rs[k][0] * c[0] * w / 2 + Ts[k][0] * c[1] * th / 2, P[k][1] + Rs[k][1] * c[0] * w / 2 + Ts[k][1] * c[1] * th / 2, P[k][2] + Rs[k][2] * c[0] * w / 2 + Ts[k][2] * c[1] * th / 2);
+    G.U.push(u0 + k * 0.25, m < 2 ? 0 : 1);
+  });
+  for (let k = 0; k < n - 1; k++) for (let m = 0; m < 4; m++) { const a = base + k * 4 + m, b = base + k * 4 + (m + 1) % 4; G.I.push(a, b, a + 4, b, b + 4, a + 4); }
+}
+function archRib(G, d, aMax, tw, depth, th) {   // one twisted plank arch across the pavilion
+  const P = [], Rs = [], Ts = [], N = 30;
+  for (let m = 0; m <= N; m++) {
+    const a = 0.005 + (m / N) * (aMax - 0.01), c = sec(d, a), t = tw * (0.35 + 0.65 * Math.sin(Math.PI * a)), cs = Math.cos(t), sn = Math.sin(t);
+    Rs.push([c.R[0] * cs + c.B[0] * sn, c.R[1] * cs, c.R[2] * cs + c.B[2] * sn]); Ts.push([-c.R[0] * sn + c.B[0] * cs, -c.R[1] * sn, -c.R[2] * sn + c.B[2] * cs]);
+    P.push([c.p[0] + c.R[0] * depth * 0.15, c.p[1] + c.R[1] * depth * 0.15, c.p[2] + c.R[2] * depth * 0.15]);
+  }
+  ribbon(G, P, Rs, Ts, depth, th, d * 0.9);
+}
+function strand(G, d0, d1, a0, fam, amp, lam, ph, depth) {   // woven strand along the pavilion
+  const n = Math.max(2, Math.ceil((d1 - d0) / 0.25) + 1), P = [], Rs = [], Ts = [];
+  for (let k = 0; k < n; k++) {
+    const d = d0 + (d1 - d0) * k / (n - 1), a = cl(a0 + fam * amp * Math.sin(6.2832 * d / lam + ph), 0.02, 0.98), c = sec(d, a);
+    P.push(c.p); Rs.push(c.R); Ts.push([c.R[1] * c.B[2], c.R[2] * c.B[0] - c.R[0] * c.B[2], -c.R[1] * c.B[0]]);
+  }
+  ribbon(G, P, Rs, Ts, depth, 0.06, d0 * 0.9);
+}
+function skin(G, d0, d1, a0, a1, off, vs, us) {
+  const nd = Math.max(1, Math.ceil((d1 - d0) / 0.5)), na = 18, base = G.P.length / 3;
+  for (let i = 0; i <= nd; i++) for (let j = 0; j <= na; j++) {
+    const d = d0 + (d1 - d0) * i / nd, a = a0 + (a1 - a0) * j / na, c = sec(d, a);
+    G.P.push(c.p[0] + c.R[0] * off, c.p[1] + c.R[1] * off, c.p[2] + c.R[2] * off); G.U.push(d * us, a * vs);
+  }
+  for (let i = 0; i < nd; i++) for (let j = 0; j < na; j++) { const a = base + i * (na + 1) + j, c = a + na + 1; G.I.push(a, a + 1, c, a + 1, c + 1, c); }
+}
+function petals(g, d0, d1) {
+  const nd = Math.max(2, Math.round((d1 - d0) / 0.55)), na = 14, im = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), M.petal, nd * na), m4 = new THREE.Matrix4(), col = new THREE.Color(); let q = 0;
+  for (let i = 0; i < nd; i++) for (let j = 0; j < na; j++) {
+    const d = d0 + (i + (j % 2 ? 0.75 : 0.25)) * (d1 - d0) / nd, c = sec(d, 0.05 + 0.9 * (j + 0.5) / na);
+    const X = [c.B[1] * c.R[2] - c.B[2] * c.R[1], c.B[2] * c.R[0] - c.B[0] * c.R[2], c.B[0] * c.R[1] - c.B[1] * c.R[0]];
+    m4.makeBasis(new THREE.Vector3(X[0] * 0.42, X[1] * 0.42, X[2] * 0.42), new THREE.Vector3(c.R[0] * 0.1, c.R[1] * 0.1, c.R[2] * 0.1), new THREE.Vector3(c.B[0] * 0.58, c.B[1] * 0.58, c.B[2] * 0.58));
+    m4.setPosition(c.p[0] + c.R[0] * 0.08, c.p[1] + c.R[1] * 0.08, c.p[2] + c.R[2] * 0.08); im.setMatrixAt(q, m4);
+    col.setHSL(0.07 + rnd() * 0.03, 0.55, 0.42 + rnd() * 0.2); im.setColorAt(q, col); q++;
+  }
+  im.instanceMatrix.needsUpdate = true; g.add(im);
+}
+function tree(g, d, side) {   // bamboo-style tree column that carries the climax canopy
+  const f = fr(d), c0 = sec(d, side).p, inw = side ? -1 : 1, b0 = new THREE.Vector3(c0[0] + f.nx * inw * 0.7, 0, c0[2] + f.nz * inw * 0.7);
+  [0.2, 0.31, 0.43].forEach((a0, q) => {
+    const top = sec(d + (q - 1) * 0.5, side ? 1 - a0 : a0).p, mid = new THREE.Vector3(b0.x + (top[0] - b0.x) * 0.35, top[1] * 0.45, b0.z + (top[2] - b0.z) * 0.35);
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([b0.clone(), mid, new THREE.Vector3(top[0], top[1] - 0.05, top[2])]), 14, 0.065 - q * 0.008, 6, false), M.bamboo));
+  });
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.5, 10), M.steel); ring.position.set(b0.x, 0.25, b0.z); g.add(ring);
+}
+function spire(g, d, idx) {
+  const c = sec(d, 0.5), h = 1.6 + 1.6 * ((idx * 37) % 10) / 10, cone = new THREE.Mesh(new THREE.ConeGeometry(0.09, h, 6), M.steel);
+  cone.position.set(c.p[0], c.p[1] + h / 2 + 0.1, c.p[2]); g.add(cone);
+  const tip = new THREE.MeshBasicMaterial({color: 0xff7a45}), t = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), tip);
+  t.position.set(c.p[0], c.p[1] + h + 0.15, c.p[2]); g.add(t); pulse.push({m: tip, base: new THREE.Color(0xff7a45), i: idx});
+}
+
+// ---- build the pavilion, one group per room so every room stays selectable ----
+const glowP = [], glowC = [], washP = [], washC = [], lamps = [];
+if (HAS) {
+  segs.forEach((s, idx) => {
+    const g = new THREE.Group(), z = s.zone || "none", d0 = CUM[idx], d1 = d0 + s.length, light = s.light !== undefined ? s.light : 0.6, kind = s.material || "wood";
+    const rmat = rm(kind, z, light), zc = new THREE.Color(ZL[z] || 0xffc27a), A = G0(), nA = s.ribs || 0;
+    const depth = z === "rhythm" ? 0.55 : z === "intro" ? 0.22 : z === "outro" ? 0.3 : 0.4, th = kind === "glass" ? 0.04 : 0.07;
+    for (let k = 0; k < nA; k++) {
+      const d = d0 + (k + 0.5) * s.length / nA, tw = (s.twist || 0) * Math.PI / 180 * (k % 2 ? -1 : 1) * (z === "rhythm" ? 1.6 : 1), aMax = z === "outro" ? 1 - 0.5 * (s.zt || 0) : 1;
+      archRib(A, d, aMax, tw, depth, th);
+      [0, 1].forEach(sd => { const c = sec(d, sd).p; glowP.push(c[0], 0.06, c[2]); glowC.push(zc.r, zc.g, zc.b); washP.push(c[0], 1.1, c[2]); washC.push(zc.r, zc.g, zc.b); });
+      if (z === "climax" && k % 3 === 1) spire(g, d, idx * 7 + k);
+    }
+    mkMesh(A, rmat, g);
+    if (z !== "intro") {
+      const S = G0(), nJ = z === "harmony" ? 8 : z === "outro" ? 5 : z === "climax" ? 16 : 12, amp = (0.4 / nJ) * (0.4 + (s.weave || 0.3)), lam = z === "rhythm" ? 2.2 : 3.6;
+      for (let fam = -1; fam <= 1; fam += 2) for (let j = 0; j < nJ; j++) {
+        const a0 = (j + 0.5) / nJ; if (z === "outro" && a0 > 1 - 0.5 * (s.zt || 0)) continue;
+        strand(S, d0, d1, a0, fam, amp, lam, j * 0.9, z === "climax" ? 0.18 : 0.24);
+      }
+      mkMesh(S, rmat, g);
+    }
+    if (z === "intro") { const K = G0(); skin(K, d0, d1, 0.04, 0.96, 0.02, 6, 0.4); mkMesh(K, M.fabric, g); }
+    if (z === "harmony") { const K = G0(); skin(K, d0, d1, 0.04, 0.96, 0.18, 8, 0.3); mkMesh(K, M.glass2, g); petals(g, d0, d1); }
+    if (z === "climax") {
+      const K = G0(), nt = Math.max(1, Math.round(s.length / 2.4)); skin(K, d0, d1, 0.1, 0.9, 0.12, 9, 0.7); mkMesh(K, M.shingle, g);
+      for (let q = 0; q < nt; q++) { const d = d0 + (q + 0.5) * s.length / nt; tree(g, d, 0); tree(g, d, 1); }
+    }
+    g.userData.seg = idx; groups.push(g); scene.add(g);
+  });
+  { // curved plinth following the plan, benches, floor glow and lamps
+    const P = G0(), nd = Math.max(2, Math.ceil(TOT_L / 0.5)), nl = 10;
+    for (let i = 0; i <= nd; i++) for (let j = 0; j <= nl; j++) { const d = TOT_L * i / nd, f = fr(d), lat = (j / nl * 2 - 1) * (wAt(d) / 2 + 1.1); P.P.push(f.px + f.nx * lat, 0.12, f.pz + f.nz * lat); P.U.push(d * 0.3, j / nl * 4); }
+    for (let i = 0; i < nd; i++) for (let j = 0; j < nl; j++) { const a = i * (nl + 1) + j, c = a + nl + 1; P.I.push(a, c, a + 1, a + 1, c, c + 1); }
+    mkMesh(P, M.plinth, scene);
+    [0.02, 0.98].forEach((u, q) => { const f = fr(TOT_L * u); for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.45, 24), M.concrete); b.position.set(f.px + f.nx * (k - 1) * 3.2 + f.tx * (q ? 4 : -4), 0.23, f.pz + f.nz * (k - 1) * 3.2 + f.tz * (q ? 4 : -4)); scene.add(b); } });
+    const glowPts = (Pp, Cc, size, op) => {
+      const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(Pp, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(Cc, 3));
+      const p = new THREE.Points(g, new THREE.PointsMaterial({size: size, map: TX.glow, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true, opacity: op, fog: false})); scene.add(p); return p;
+    };
+    window.__glow = [glowPts(glowP, glowC, 4.2, 0.8), glowPts(washP, washC, 7.5, 0.3)];
+    for (let i = 0; i < 8; i++) {
+      const d = TOT_L * (i + 0.5) / 8, z = segs[segIdx(d)].zone || "none", c = sec(d, 0.5).p, L = new THREE.PointLight(ZL[z] || 0xffc27a, 0.9, 20, 2);
+      L.position.set(c[0], Math.max(2, c[1] * 0.6), c[2]); scene.add(L); lamps.push({l: L, base: 0.9});
     }
   }
-  g.userData.seg = idx; groups.push(g);
-  scene.add(g);
-  pts.push(new THREE.Vector3(s.x0, 1.7, s.z0));
-});
-if (segs.length) {
-  const l = segs[segs.length - 1];
-  pts.push(new THREE.Vector3(l.x0 + Math.sin(l.heading) * l.length, 1.7, l.z0 + Math.cos(l.heading) * l.length));
+}
+function envUpdate(ts) {   // lights breathe, and pulse on the beats while the music walk plays
+  if (!HAS || !window.__glow) return;
+  let pl = 0.5 + 0.5 * Math.sin(ts * 2);
+  if (music && V && V.beats.length) {
+    const B = V.beats, t = curT(); let a = 0, b = B.length - 1; while (a < b) { const m = (a + b + 1) >> 1; if (B[m] <= t) a = m; else b = m - 1; }
+    pl = Math.exp(-Math.max(0, t - B[a]) * 5);
+  }
+  window.__glow[0].material.opacity = 0.55 + 0.35 * pl; window.__glow[1].material.opacity = 0.16 + 0.24 * pl;
+  lamps.forEach(L => { L.l.intensity = L.base * (0.7 + 0.6 * pl); });
 }
 
 // simple orbit controls (drag = rotate, wheel = zoom)
@@ -203,7 +388,7 @@ function startMusic(withSound) {
 function stopMusic() {
   if (!music) return;
   music = false; playing = false; if (audio) audio.pause(); sound = false;
-  bar.style.display = "none"; ppBtn.style.display = "none"; zoneEl.textContent = ""; playT = -1; drawOv();
+  bar.style.display = "none"; ppBtn.style.display = "none"; zoneEl.textContent = ""; playT = -1; drawOv(); if (typeof drawLayOv === "function") drawLayOv();
   cam.fov = 55; curFov = 55; cam.updateProjectionMatrix(); refreshBtns();
 }
 function togglePlay() {
@@ -259,12 +444,12 @@ function musicStep(dt) {
 const NOTE_N = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const noteName = m => NOTE_N[((Math.round(m) % 12) + 12) % 12] + (Math.floor(Math.round(m) / 12) - 1);
 const ZINFO = {
-  intro: ["first part of the song", "openness x0.3, half the ribs, soft warm light"],
-  rhythm: ["busy section with high note density", "extra ribs, spacing follows the beat"],
-  harmony: ["sustained section with lower note density", "two overlapping glass layers"],
-  climax: ["loudest stretch of the song", "height x1.4, leaning walls, spires, pulsing light"],
-  outro: ["closing part of the song", "height, openness and light fade out"],
-  none: ["zones are switched off", "no zone effects"]};
+  intro: ["first part of the song", "enclosed soft membrane, sparse slender ribs, warm light"],
+  rhythm: ["busy section with high note density", "dense twisted ribs with woven strands; arch spacing follows the beat"],
+  harmony: ["sustained section with lower note density", "overlapping petal shells under a layered glass skin"],
+  climax: ["loudest stretch of the song", "tree-column canopy with a shingled roof, spires and pulsing light"],
+  outro: ["closing part of the song", "ribs open up and dissolve, light fades out"],
+  none: ["zones are switched off", "plain woven lattice"]};
 const ZHEX = {intro: "#ffb454", rhythm: "#4f8cff", harmony: "#9b6bff", climax: "#ff2d55", outro: "#3fd6a0", none: "#cfd6e6"};
 const insp = document.getElementById("insp");
 let sel = -1, outline = null, playT = -1;
@@ -276,28 +461,29 @@ function showInsp(i) {
   let h = '<div class="ih" style="border-color:' + c + '"><b>Room ' + (i + 1) + ' of ' + segs.length + '</b><span>' + fmtT(s.start_time) + ' - ' +
     fmtT(s.start_time + s.duration) + '</span><em style="background:' + c + '">' + z + '</em></div>';
   if (r) {
-    const dh = b.height !== undefined && Math.abs(b.height - s.height) > 0.05, dro = b.ribs !== undefined && b.ribs !== s.ribs,
-          dop = b.openness !== undefined && Math.abs(b.openness - s.openness) > 0.005;
-    h += row("Pitch", noteName(r.pitch_midi) + " (MIDI " + r.pitch_midi.toFixed(1) + ")", n.pitch, "sets <u>height</u> " + s.height + " m" + (dh ? " (" + b.height + " before the " + z + " effect)" : ""), "#ff2d55");
-    h += row("Duration", s.duration + " s", s.duration / 6, "sets <u>length</u> " + s.length + " m (tempo " + DATA.tempo + " BPM, squeeze x" + (DATA.compression || 1) + ")", "#ff7a45");
-    h += row("Note density", r.onset_density.toFixed(1) + " notes/s", n.density, "sets <u>rib spacing</u> " + s.spacing + " m, " + s.ribs + " ribs" + (dro ? " (was " + b.ribs + ")" : ""), "#4f8cff");
-    h += row("Loudness", r.rms.toFixed(3) + " rms", n.energy, "sets <u>openness</u> " + Math.round(s.openness * 100) + "%" + (dop ? " (was " + Math.round(b.openness * 100) + "%)" : "") + ", walls " + Math.round((1 - 0.8 * s.openness) * 100) + "% solid", "#3fd6a0");
-    h += row("Brightness", Math.round(r.centroid) + " Hz", n.bright, "picks the <u>material</u>: " + s.material, "#ffb454");
-    h += row("Melody movement", ((s.move || 0) >= 0 ? "+" : "") + (s.move || 0).toFixed(2), Math.abs(s.move || 0) * 4, "bends the <u>path</u> " + ((s.turn_deg || 0) >= 0 ? "+" : "") + (s.turn_deg || 0) + " deg (heading " + Math.round(s.heading * 57.3) + " deg)", "#9b6bff");
+    const dh = b.height !== undefined && Math.abs(b.height - s.height) > 0.05, dro = b.ribs !== undefined && b.ribs !== s.ribs, dop = b.openness !== undefined && Math.abs(b.openness - s.openness) > 0.005;
+    h += row("Pitch", noteName(r.pitch_midi) + " (MIDI " + r.pitch_midi.toFixed(1) + ")", n.pitch, "sets the roof <u>height</u> " + s.height + " m" + (dh ? " (" + b.height + " m before the " + z + " effect)" : ""), "#ff2d55");
+    h += row("Duration", s.duration + " s", s.duration / 6, "sets the bay <u>length</u> " + s.length + " m (tempo " + DATA.tempo + " BPM, squeeze x" + (DATA.compression || 1) + ")", "#ff7a45");
+    h += row("Note density", r.onset_density.toFixed(1) + " notes/s", n.density, "sets the <u>arch spacing</u> " + s.spacing + " m (" + s.ribs + " arches here" + (dro ? ", was " + b.ribs : "") + ") and the weave amount " + (s.weave || 0), "#4f8cff");
+    h += row("Loudness", r.rms.toFixed(3) + " rms", n.energy, "sets the <u>plan width</u> " + (s.width || 0) + " m and openness " + Math.round(s.openness * 100) + "%" + (dop ? " (was " + Math.round(b.openness * 100) + "%)" : ""), "#3fd6a0");
+    h += row("Brightness", Math.round(r.centroid) + " Hz", n.bright, "picks the <u>material</u> (" + s.material + ") and the <u>arch shape</u> p " + (s.arch_p || 1) + (s.arch_p > 1.15 ? ", pointed" : s.arch_p < 0.9 ? ", rounded" : ""), "#ffb454");
+    h += row("Melody movement", ((s.move || 0) >= 0 ? "+" : "") + (s.move || 0).toFixed(2), Math.abs(s.move || 0) * 4, "bends the <u>path</u> " + ((s.turn_deg || 0) >= 0 ? "+" : "") + (s.turn_deg || 0) + " deg and twists the ribs " + (s.twist || 0) + " deg", "#9b6bff");
   }
   h += '<div class="r"><div class="rt"><span>Song position</span><b style="color:' + c + '">' + z + '</b></div><div class="ra">' + ZINFO[z][0] +
-    '. Effect: ' + ZINFO[z][1] + '. Light level ' + s.light + '.</div></div>';
+    '. Pattern: <u>' + (s.pattern || "lattice") + '</u>. ' + ZINFO[z][1] + '. Light level ' + s.light + '.</div></div>';
   insp.innerHTML = h;
 }
 function select(i) {
   if (i < 0 || i >= groups.length || i === sel) return;
-  if (outline && sel >= 0) groups[sel].remove(outline);
-  sel = i; const s = segs[i];
-  outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W + 0.8, s.height, s.length)), new THREE.LineBasicMaterial({color: 0xffffff}));
-  outline.position.y = s.height / 2; groups[i].add(outline);
-  showInsp(i); drawOv();
+  if (outline) scene.remove(outline);
+  sel = i; const s = segs[i]; outline = new THREE.Group();
+  [CUM[i], CUM[i] + s.length].forEach(d => {
+    const P = []; for (let m = 0; m <= 40; m++) { const c = sec(d, m / 40); P.push(new THREE.Vector3(c.p[0] + c.R[0] * 0.2, c.p[1] + c.R[1] * 0.2, c.p[2] + c.R[2] * 0.2)); }
+    outline.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(P), new THREE.LineBasicMaterial({color: 0xffffff})));
+  });
+  scene.add(outline); showInsp(i); drawOv(); if (typeof drawLayOv === "function") drawLayOv();
 }
-function follow(i, t) { playT = t; select(i); drawOv(); }
+function follow(i, t) { playT = t; select(i); drawOv(); if (typeof drawLayOv === "function") drawLayOv(); }
 const ray = new THREE.Raycaster(), mv = new THREE.Vector2(); let downAt = null;
 cv.addEventListener("mousedown", e => { downAt = [e.clientX, e.clientY]; });
 cv.addEventListener("mouseup", e => {
@@ -450,6 +636,136 @@ insp.innerHTML = '<div class="r"><b>Select a room</b><div class="ra">Click any r
 buildAna(); drawAll(); setTimeout(drawAll, 400);
 let rzT = null; addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(drawAll, 120); });
 
+// ================= LAYOUTS: plan, longitudinal section, cross-section, column detail =================
+const lay = document.getElementById("lay"), LC = {}, SK = "italic 12px 'Segoe Print','Bradley Hand','Comic Sans MS',cursive";
+let layCrossSel = -2;
+const dimLine = (x, x0, y0, x1, y1, txt, tx, ty) => {
+  x.strokeStyle = "rgba(255,255,255,.7)"; x.lineWidth = 1; x.beginPath(); x.moveTo(x0, y0); x.lineTo(x1, y1); x.stroke();
+  const a = Math.atan2(y1 - y0, x1 - x0); [[x0, y0, 1], [x1, y1, -1]].forEach(e => { x.beginPath(); x.moveTo(e[0] - Math.sin(a) * 5, e[1] + Math.cos(a) * 5); x.lineTo(e[0] + Math.sin(a) * 5, e[1] - Math.cos(a) * 5); x.stroke(); });
+  x.fillStyle = "#e6e1f5"; x.font = SK; x.fillText(txt, tx, ty);
+};
+function human(x, px, gy, s) {   // 1.7 m figure
+  const h = 1.7 * s; x.fillStyle = "rgba(235,235,245,.9)"; x.beginPath(); x.arc(px, gy - h + 0.12 * s, 0.11 * s, 0, 6.3); x.fill();
+  x.beginPath(); x.moveTo(px - 0.17 * s, gy - h + 0.28 * s); x.lineTo(px + 0.17 * s, gy - h + 0.28 * s); x.lineTo(px + 0.12 * s, gy - 0.85 * s); x.lineTo(px + 0.1 * s, gy); x.lineTo(px + 0.02 * s, gy); x.lineTo(px, gy - 0.7 * s); x.lineTo(px - 0.02 * s, gy); x.lineTo(px - 0.1 * s, gy); x.lineTo(px - 0.12 * s, gy - 0.85 * s); x.closePath(); x.fill();
+}
+function planXf() {
+  const a = segs[0], e = segs[segs.length - 1], ex = e.x0 + Math.sin(e.heading) * e.length - a.x0, ez = e.z0 + Math.cos(e.heading) * e.length - a.z0, L = Math.hypot(ex, ez) || 1, ux = ex / L, uz = ez / L;
+  return p => [(p[0] - a.x0) * ux + (p[1] - a.z0) * uz, -((p[0] - a.x0) * uz - (p[1] - a.z0) * ux)];
+}
+function edges(d) { const f = fr(d), ww = wAt(d) / 2; return [[f.px + f.nx * ww, f.pz + f.nz * ww], [f.px - f.nx * ww, f.pz - f.nz * ww]]; }
+function dPlan(x, w, h) {
+  const PF = planXf(), N = Math.max(8, Math.ceil(TOT_L / 0.5)), Lf = [], Rf = [];
+  for (let k = 0; k <= N; k++) { const e = edges(TOT_L * k / N); Lf.push(PF(e[0])); Rf.push(PF(e[1])); }
+  const all = Lf.concat(Rf), xs = all.map(p => p[0]), ys = all.map(p => p[1]), mnx = Math.min(...xs), mxx = Math.max(...xs), mny = Math.min(...ys), mxy = Math.max(...ys), m = 48;
+  const sc = Math.min((w - 2 * m - 70) / (mxx - mnx), (h - 2 * m) / (mxy - mny)), ox = m + 20 + ((w - 2 * m - 70) - (mxx - mnx) * sc) / 2 - mnx * sc, oy = m + ((h - 2 * m) - (mxy - mny) * sc) / 2 - mny * sc;
+  const T = p => [ox + p[0] * sc, oy + p[1] * sc]; LC.plan.T = T; LC.plan.PF = PF; LC.plan.sc = sc;
+  x.strokeStyle = "rgba(255,255,255,.05)"; x.lineWidth = 1; for (let gx = 0; gx < w; gx += 24) { x.beginPath(); x.moveTo(gx, 0); x.lineTo(gx, h); x.stroke(); } for (let gy = 0; gy < h; gy += 24) { x.beginPath(); x.moveTo(0, gy); x.lineTo(w, gy); x.stroke(); }
+  segs.forEach((s, i) => {   // zone-tinted footprint
+    const a = edges(CUM[i]), b = edges(CUM[i] + s.length), P = [PF(a[0]), PF(b[0]), PF(b[1]), PF(a[1])].map(T);
+    x.fillStyle = ZHEX[s.zone || "none"]; x.globalAlpha = 0.17; x.beginPath(); P.forEach((p, k) => k ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.closePath(); x.fill(); x.globalAlpha = 1;
+    for (let k = 0; k < (s.ribs || 0); k++) { const e = edges(CUM[i] + (k + 0.5) * s.length / s.ribs), p0 = T(PF(e[0])), p1 = T(PF(e[1])); x.strokeStyle = "rgba(255,255,255,.3)"; x.lineWidth = 0.8; x.beginPath(); x.moveTo(p0[0], p0[1]); x.lineTo(p1[0], p1[1]); x.stroke(); }
+    if (s.zone === "climax") { const nt = Math.max(1, Math.round(s.length / 2.4)); for (let q = 0; q < nt; q++) { const e = edges(CUM[i] + (q + 0.5) * s.length / nt); e.forEach(pp => { const p = T(PF(pp)); x.fillStyle = "#ff5a5a"; x.beginPath(); x.arc(p[0], p[1], 3, 0, 6.3); x.fill(); }); } }
+  });
+  x.strokeStyle = "#fff"; x.lineWidth = 1.6; x.beginPath(); Lf.map(T).forEach((p, k) => k ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); Rf.slice().reverse().map(T).forEach(p => x.lineTo(p[0], p[1])); x.closePath(); x.stroke();
+  const ls = segs[segs.length - 1], a0 = T(PF([segs[0].x0, segs[0].z0])), e1 = T(PF([ls.x0 + Math.sin(ls.heading) * ls.length, ls.z0 + Math.cos(ls.heading) * ls.length]));
+  x.setLineDash([10, 4, 2, 4]); x.strokeStyle = "rgba(255,255,255,.7)"; x.beginPath(); x.moveTo(a0[0] - 14, a0[1]); x.lineTo(e1[0] + 14, e1[1]); x.stroke(); x.setLineDash([]);
+  x.fillStyle = "#e6e1f5"; x.font = SK; x.fillText("A", a0[0] - 26, a0[1] + 4); x.fillText("A'", e1[0] + 18, e1[1] + 4);
+  const yb = T([0, mxy])[1] + 22; dimLine(x, T([mnx, 0])[0], yb, T([mxx, 0])[0], yb, TOT_L.toFixed(1) + " m", (T([mnx, 0])[0] + T([mxx, 0])[0]) / 2 - 20, yb + 14);
+  const xr = T([mxx, 0])[0] + 22; dimLine(x, xr, T([0, mny])[1], xr, T([0, mxy])[1], "W max " + Math.max(...segs.map(s => s.width)).toFixed(1) + " m", xr - 44, T([0, mny])[1] - 6);
+  const n0 = PF([segs[0].x0, segs[0].z0 + 1]), n1 = PF([segs[0].x0, segs[0].z0]), nv = [n0[0] - n1[0], n0[1] - n1[1]];   // north arrow
+  x.strokeStyle = "#fff"; x.beginPath(); x.arc(34, 38, 16, 0, 6.3); x.stroke(); x.beginPath(); x.moveTo(34 - nv[0] * 12, 38 - nv[1] * 12); x.lineTo(34 + nv[0] * 14, 38 + nv[1] * 14); x.stroke(); x.fillStyle = "#fff"; x.fillText("N", 29 + nv[0] * 26, 42 + nv[1] * 26);
+  x.fillStyle = "#e6e1f5"; x.fillRect(m + 14, h - 20, 5 * sc, 3); x.fillText("5 m", m + 14 + 5 * sc + 6, h - 14); x.fillText("Plan", w - 70, 20);
+}
+function dSection(x, w, h) {
+  const m = 36, Hs = [], N = Math.ceil(TOT_L / 0.4); for (let k = 0; k <= N; k++) Hs.push(hAt(TOT_L * k / N)); const Hm = Math.max(...Hs), sc = Math.min((w - 2 * m) / TOT_L, (h - 74) / Hm), gy = h - 50;
+  const X = d => m + d * sc, Y = hh => gy - hh * sc; LC.sec.sc = sc; LC.sec.m = m; LC.sec.gy = gy;
+  segs.forEach((s, i) => { x.fillStyle = ZHEX[s.zone || "none"]; x.globalAlpha = 0.22; x.fillRect(X(CUM[i]), gy + 4, s.length * sc + 0.5, 6); x.globalAlpha = 1; });
+  x.strokeStyle = "rgba(255,255,255,.28)"; x.lineWidth = 0.7;   // lattice
+  for (let r = 0; r < 5; r++) for (let d = (r % 2 ? 0.45 : 0); d < TOT_L; d += 0.9) {
+    const y0 = hAt(d) * r / 5, y1 = hAt(Math.min(TOT_L, d + 0.45)) * (r + 1) / 5, y2 = hAt(Math.max(0, d - 0.45)) * (r + 1) / 5;
+    x.beginPath(); x.moveTo(X(d), Y(y0)); x.lineTo(X(Math.min(TOT_L, d + 0.45)), Y(y1)); x.moveTo(X(d), Y(y0)); x.lineTo(X(Math.max(0, d - 0.45)), Y(y2)); x.stroke();
+  }
+  x.strokeStyle = "#fff"; x.lineWidth = 2; x.beginPath(); Hs.forEach((v, k) => { const px = X(TOT_L * k / N), py = Y(v); if (k) x.lineTo(px, py); else x.moveTo(px, py); }); x.stroke();
+  x.fillStyle = "#fff"; x.fillRect(m - 10, gy, TOT_L * sc + 20, 4);
+  const pk = []; for (let k = 2; k < N - 1; k++) if (Hs[k] > Hs[k - 1] && Hs[k] >= Hs[k + 1] && Hs[k] > 0.55 * Hm) pk.push(k);
+  pk.sort((a, b) => Hs[b] - Hs[a]).slice(0, 4).forEach(k => { const px = X(TOT_L * k / N); dimLine(x, px, Y(Hs[k]), px, gy, "", 0, 0); x.fillStyle = "#e6e1f5"; x.font = SK; x.fillText(Hs[k].toFixed(1), px + 4, Y(Hs[k] / 2)); });
+  [0, TOT_L].forEach(d => { const px = X(d), e = hAt(d); x.fillStyle = "#e6e1f5"; x.font = SK; x.fillText(e.toFixed(1), px + (d ? -26 : 6), Y(e) - 6); });
+  const pkI = Hs.indexOf(Hm); [0.1 * TOT_L, TOT_L * pkI / N, 0.9 * TOT_L].forEach(d => human(x, X(d), gy, sc));
+  dimLine(x, X(0), gy + 30, X(TOT_L), gy + 30, TOT_L.toFixed(1) + " m", X(TOT_L / 2) - 20, gy + 44);
+  x.fillStyle = "#e6e1f5"; x.font = SK; x.fillText("Longitudinal section A-A'", w - 190, 18);
+}
+function dCross(x, w, h) {
+  const i = sel >= 0 ? sel : segs.reduce((b, s, k) => s.height > segs[b].height ? k : b, 0), s = segs[i], d = CUM[i] + s.length / 2;
+  const H = hAt(d), Wd = wAt(d), pp = pAt(d), m = 40, sc = Math.min((w - 2 * m - 70) / Wd, (h - 2 * m - 18) / H), cx = w / 2, gy = h - m - 6;
+  const pt = a => { const al = Math.PI * a, sn = Math.max(1e-4, Math.sin(al)); return [cx - (Wd / 2) * Math.cos(al) * sc, gy - H * Math.pow(sn, pp) * sc]; };
+  const tw = (s.twist || 0) * Math.PI / 180; x.strokeStyle = "rgba(255,255,255,.35)"; x.lineWidth = 1;
+  for (let a = 0.04; a < 0.97; a += 0.04) { const p = pt(a), q = pt(a + 0.01), tx = q[0] - p[0], ty = q[1] - p[1], L = Math.hypot(tx, ty) || 1, nx = ty / L, ny = -tx / L, len = 0.4 * sc * (s.zone === "rhythm" ? 1.3 : 1), sl = Math.tan(tw) * 0.25 * len;
+    x.beginPath(); x.moveTo(p[0] - nx * len * 0.3, p[1] - ny * len * 0.3); x.lineTo(p[0] + nx * len + (tx / L) * sl, p[1] + ny * len + (ty / L) * sl); x.stroke(); }
+  x.strokeStyle = "#fff"; x.lineWidth = 2.2; x.beginPath(); for (let a = 0; a <= 1.001; a += 0.02) { const p = pt(a); if (a === 0) x.moveTo(p[0], p[1]); else x.lineTo(p[0], p[1]); } x.stroke();
+  x.fillStyle = "#fff"; x.fillRect(cx - Wd / 2 * sc - 24, gy, Wd * sc + 48, 4); human(x, cx, gy, sc);
+  dimLine(x, cx - Wd / 2 * sc, gy + 20, cx + Wd / 2 * sc, gy + 20, Wd.toFixed(1) + " m", cx - 16, gy + 34); dimLine(x, cx + Wd / 2 * sc + 22, gy, cx + Wd / 2 * sc + 22, gy - H * sc, "H " + H.toFixed(1), cx + Wd / 2 * sc + 28, gy - H * sc / 2);
+  x.fillStyle = ZHEX[s.zone || "none"]; x.font = "600 11px system-ui"; x.fillText("SECTION B-B'  |  ROOM " + (i + 1) + "  |  " + (s.zone || "").toUpperCase(), 10, 16);
+  x.fillStyle = "#cfd6e6"; x.font = SK; x.fillText("arch exponent p " + pp.toFixed(2) + (pp > 1.15 ? " (pointed)" : pp < 0.9 ? " (rounded)" : ""), 10, 34); x.fillText("rib twist " + (s.twist || 0) + " deg, " + (s.material || ""), 10, 50);
+  layCrossSel = sel;
+}
+function sk(x, pts, j) {   // hand-drawn line
+  x.beginPath(); pts.forEach((p, k) => { const px = p[0] + (rnd() - 0.5) * j, py = p[1] + (rnd() - 0.5) * j; if (k) x.lineTo(px, py); else x.moveTo(px, py); }); x.stroke();
+}
+function dDetail(x, w, h) {
+  const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "#4b505e"); g.addColorStop(1, "#2a2e3a"); x.fillStyle = g; x.fillRect(0, 0, w, h);
+  const cs = segs.filter(s => s.zone === "climax"), c = (cs.length ? cs : segs).reduce((b, s) => s.height > b.height ? s : b, segs[0]);
+  rs_ = 99; x.strokeStyle = "rgba(255,255,255,.92)"; x.lineWidth = 1.3; x.fillStyle = "#fff"; x.font = SK;
+  const bx = w * 0.3, by = h - 36, H = Math.min(h - 80, 150), sp = 0.55 * H;
+  for (let q = 0; q < 5; q++) { const t = (q - 2); sk(x, [[bx + t * 3, by], [bx + t * 4, by - H * 0.35], [bx + t * 18, by - H * 0.62], [bx + t * 34 - 10, by - H * 0.82], [bx + t * 52 - 18, by - H]], 1.2); }
+  sk(x, [[bx - 70, by - H * 0.86], [bx - 30, by - H * 1.02], [bx + 30, by - H * 1.02], [bx + 70, by - H * 0.86]], 1.4);
+  [0.15, 0.45, 0.72].forEach((f, q) => { const yy = by - H * f; x.beginPath(); x.ellipse(bx, yy, 9 + q, 3.5, 0, 0, 6.3); x.stroke(); sk(x, [[bx + 14, yy], [bx + 70, yy - 6]], 1); x.fillText("anchor " + (q + 1), bx + 74, yy - 4); });
+  x.fillText("pole bundle", bx - 100, by - H * 0.5); sk(x, [[bx - 60, by - H * 0.5 + 4], [bx - 26, by - H * 0.5 + 14]], 1);
+  x.fillText("steel base pipe", bx - 40, by + 20); sk(x, [[bx - 18, by + 12], [bx - 4, by + 2]], 1); sk(x, [[bx - 30, by], [bx + 30, by]], 0.8);
+  const px = w * 0.78, py = h * 0.45; x.beginPath(); x.arc(px, py, 22, 0, 6.3); x.stroke();
+  for (let k = 0; k < 8; k++) { const a = k / 8 * 6.283; x.beginPath(); x.arc(px + Math.cos(a) * 40, py + Math.sin(a) * 40, 8, 0, 6.3); x.stroke(); }
+  sk(x, [[bx + 130, by - H * 0.1], [px - 62, py + 30]], 1); x.fillText("plan of pole cluster", px - 60, py + 66); x.fillText("main pole", px + 30, py - 34);
+  x.fillStyle = "#ffd9a0"; x.fillText("Tree column detail  |  climax zone", 10, 18); x.fillStyle = "#e6e1f5";
+  x.fillText("height " + c.height.toFixed(1) + " m, canopy span " + c.width.toFixed(1) + " m", 10, h - 28); x.fillText("3 poles per branch, one tree every 2.4 m, shingled roof above", 10, h - 10);
+}
+function drawLayOv() {
+  if (!HAS || !LC.plan) return;
+  ["plan", "sec"].forEach(k => {
+    const c = LC[k], x = c.ox; if (!x) return; x.clearRect(0, 0, c.w, c.h);
+    if (k === "plan" && c.T) {
+      if (sel >= 0) { const a = edges(CUM[sel]), b = edges(CUM[sel] + segs[sel].length), P = [a[0], b[0], b[1], a[1]].map(p => c.T(c.PF(p)));
+        x.fillStyle = "rgba(255,255,255,.28)"; x.beginPath(); P.forEach((p, i) => i ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.closePath(); x.fill();
+        const e = edges(CUM[sel] + segs[sel].length / 2), p0 = c.T(c.PF(e[0])), p1 = c.T(c.PF(e[1])); x.strokeStyle = "#fff"; x.setLineDash([8, 3, 2, 3]); x.beginPath(); x.moveTo(p0[0], p0[1] - 16); x.lineTo(p1[0], p1[1] + 16); x.stroke(); x.setLineDash([]);
+        x.fillStyle = "#fff"; x.font = SK; x.fillText("B", p0[0] - 4, p0[1] - 20); x.fillText("B'", p1[0] - 6, p1[1] + 30); }
+      if (playT >= 0) { const f = fr(cl(distAt(playT), 0, TOT_L)), p = c.T(c.PF([f.px, f.pz])); x.fillStyle = "#ff2d55"; x.beginPath(); x.arc(p[0], p[1], 5, 0, 6.3); x.fill(); x.strokeStyle = "#fff"; x.lineWidth = 1.5; x.stroke(); }
+    }
+    if (k === "sec" && c.sc) {
+      if (sel >= 0) { x.fillStyle = "rgba(255,255,255,.16)"; x.fillRect(c.m + CUM[sel] * c.sc, 0, Math.max(2, segs[sel].length * c.sc), c.gy); }
+      if (playT >= 0) { const px = c.m + cl(distAt(playT), 0, TOT_L) * c.sc; x.strokeStyle = "#ff2d55"; x.lineWidth = 1.6; x.beginPath(); x.moveTo(px, 0); x.lineTo(px, c.gy + 8); x.stroke(); }
+    }
+  });
+  if (layCrossSel !== sel && LC.cross && LC.cross.bx) { LC.cross.bx.clearRect(0, 0, LC.cross.w, LC.cross.h); dCross(LC.cross.bx, LC.cross.w, LC.cross.h); }
+}
+function drawLayAll() {
+  if (!HAS || !LC.plan) return;
+  const D = {plan: dPlan, sec: dSection, cross: dCross, det: dDetail};
+  Object.keys(LC).forEach(k => { const c = LC[k]; fit(c, Math.max(200, Math.floor(c.wrap.parentElement.clientWidth))); c.bx.clearRect(0, 0, c.w, c.h); D[k](c.bx, c.w, c.h); });
+  drawLayOv();
+}
+function buildLay() {
+  if (!HAS) { lay.style.display = "none"; return; }
+  lay.innerHTML = '<h2>Layouts</h2><div class="sub">Plan, longitudinal section, cross-section and a column detail, drawn from the generated pavilion. Click a room or a chart to move the section marker B-B\'.</div>';
+  const mkc = (title, sub, hh, host) => { const box = document.createElement("div"); box.className = "ch"; box.innerHTML = '<h3>' + title + '<small>' + sub + '</small></h3>'; (host || lay).appendChild(box); return pair(box, hh); };
+  LC.plan = mkc("Plan", "footprint, arches, tree columns, section lines A-A' and B-B'", 300);
+  LC.sec = mkc("Longitudinal section A-A'", "roof profile, lattice, heights and human scale", 250);
+  const rw = document.createElement("div"); rw.className = "two"; lay.appendChild(rw);
+  const l = document.createElement("div"), r = document.createElement("div"); l.style.cssText = "flex:1;min-width:0"; r.style.cssText = "flex:1;min-width:0"; rw.appendChild(l); rw.appendChild(r);
+  LC.cross = mkc("Cross-section B-B'", "the selected room, cut across", 290, l); LC.det = mkc("Column detail", "tree column of the climax zone", 290, r);
+  LC.plan.o.addEventListener("click", ev => { const c = LC.plan; if (!c.T) return; let b = 0, bd = 1e9; segs.forEach((s, i) => { const e = edges(CUM[i] + s.length / 2), p = c.T(c.PF([(e[0][0] + e[1][0]) / 2, (e[0][1] + e[1][1]) / 2])), dd = Math.abs(p[0] - ev.offsetX); if (dd < bd) { bd = dd; b = i; } }); select(b); });
+  LC.sec.o.addEventListener("click", ev => { const c = LC.sec; select(segIdx(cl((ev.offsetX - c.m) / c.sc, 0, TOT_L))); });
+}
+buildLay(); drawLayAll(); setTimeout(drawLayAll, 400);
+let lzT = null; addEventListener("resize", () => { clearTimeout(lzT); lzT = setTimeout(drawLayAll, 140); });
+
 let last = performance.now();
 function loop(now) {
   const dt = (now - last) / 1000; last = now;
@@ -467,6 +783,7 @@ function loop(now) {
     if (p.m) p.m.color.copy(p.base).multiplyScalar(0.6 + 0.8 * k);
     if (p.l) p.l.intensity = 0.4 + 1.6 * k;
   });
+  envUpdate(ts);
   renderer.render(scene, cam);
   requestAnimationFrame(loop);
 }

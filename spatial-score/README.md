@@ -17,7 +17,9 @@ Concept and mapping framework: **Agna** (5th-year Architecture). Technical devel
 6. [The mapping rules](#6-the-mapping-rules)
 7. [The five zones](#7-the-five-zones)
 8. [The 3D viewer and walkthrough](#8-the-3d-viewer-and-walkthrough)
-   - [Musical Feature Analysis and the room inspector](#8b-musical-feature-analysis-and-the-room-inspector)
+   - [The generated pavilion](#8a-the-generated-pavilion)
+   - [Layouts](#8b-layouts)
+   - [Musical Feature Analysis and the room inspector](#8c-musical-feature-analysis-and-the-room-inspector)
 9. [The frontend design](#9-the-frontend-design)
 10. [Music sources](#10-music-sources)
 11. [Tech stack](#11-tech-stack)
@@ -165,7 +167,7 @@ Receives that JSON and the (optional) audio, and draws the pavilion. See section
 
 | Music | Becomes | Rule (n = normalised 0 to 1 value) |
 |---|---|---|
-| **Pitch** | Height | `height = hmin + (hmax - hmin) x pitch_n` |
+| **Pitch** | Height | `height = hmin + (hmax - hmin) x pitch_n` in room units, then converted to metres (`1.2 + 0.42 x height`) |
 | **Duration** | Spatial length | `length = clip(duration x 1.5 x length_scale x compression, 2, 12)` |
 | **Tempo** | Compression / expansion | `compression = clip(100 / tempo, 0.6, 1.5)`. Fast songs squeeze every room, slow songs stretch them. |
 | **Rhythm / texture** | Spacing and ribs | `spacing = 2.5 - 1.9 x density_n`; `ribs = max(2, int(length / spacing))` |
@@ -224,7 +226,42 @@ Only the first "Max audio length" seconds are analysed (default 90). The app sho
 
 ---
 
-## 8b. Musical Feature Analysis and the room inspector
+## 8a. The generated pavilion
+
+The pavilion is a **parametric woven-timber structure**, not a row of boxes. Everything is in metres. The song's timeline runs along the length; the cross-section is an arch whose size and shape change with the music.
+
+| Music | Shapes | How |
+|---|---|---|
+| Pitch | Roof height (about 2 to 12 m) | Smoothed over neighbouring rooms into a wave-like silhouette, tapering low at both ends |
+| Loudness | Plan width (5 to 13 m) | Loud passages bulge the footprint, quiet ones pinch it, like the peanut-shaped plan of a lattice pavilion |
+| Brightness | Arch shape and material | Dull sounds give rounded arches, bright sounds give pointed arches; material is concrete, timber or glass |
+| Note density | Arch spacing and weave | Busy music packs the arches closer and weaves more strands |
+| Melody movement | Path bend and rib twist | A rising or falling tune bends the route and twists the plank ribs up to 70 degrees |
+| Duration and tempo | Bay length | Total length is 18 to 48 m, scaled by the "Length scale" slider |
+
+Each zone has its own architectural pattern:
+
+| Zone | Pattern |
+|---|---|
+| Intro | Soft glowing membrane with a few slender ribs |
+| Rhythm | Dense twisted plank ribs with woven diagonal strands |
+| Harmony | Overlapping petal shells (instanced scales) under a layered glass skin |
+| Climax | Tree columns (bamboo-textured branching poles) carrying a shingled roof, with spires and pulsing light |
+| Outro | Ribs open up and dissolve, lights fade |
+
+**Texture and lighting:** procedural textures (timber grain, terracotta shingles, bamboo, concrete, glass frit, paving), a night environment (dusk sky gradient, stars, moon, city skyline), a curved plinth, benches, uplights glowing at the foot of every arch, and warm lamps inside. The lights pulse on the detected beats during a Walk with music.
+
+## 8b. Layouts
+
+Below the 3D view, a **Layouts** section draws the pavilion as architectural drawings from the generated geometry:
+- **Plan:** zone-tinted footprint, arches, tree columns, section lines A-A' and B-B', overall dimensions, north arrow and scale bar.
+- **Longitudinal section A-A':** roof profile, lattice, dimensioned peak heights, human figures for scale and the zone bands.
+- **Cross-section B-B':** the selected room cut across, showing the arch curve, rib twist, dimensions and a human figure. It updates when you click a room.
+- **Column detail:** a hand-drawn style sketch of the climax tree column and its pole cluster plan, with the real height and span.
+
+Click a room, the plan or the section to move the marker; during a walk a red dot and line follow you.
+
+## 8c. Musical Feature Analysis and the room inspector
 
 Below the 3D pavilion (Studio and Gallery) is a **Musical Feature Analysis** section. All charts share one time axis, so you can read them against each other and against the model.
 

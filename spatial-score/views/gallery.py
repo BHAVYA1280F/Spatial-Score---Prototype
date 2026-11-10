@@ -74,8 +74,8 @@ if sel and Path(sel).exists():
         audio_uri = (f"data:{MIME[p.suffix.lower()]};base64," + base64.b64encode(raw).decode()) if len(raw) <= 15 * 1024 * 1024 else None
         html = (ROOT / "viewer" / "scene.html").read_text(encoding="utf-8")
         html = html.replace("__DATA__", json.dumps(arch)).replace("__AUDIO__", json.dumps(audio_uri))
-        components.html(html, height=640 + (920 if arch.get("viz") else 0))
-        st.caption("Click a room (or any chart) to see which musical information shaped it. Press Walk with music to hear the track while you move through its pavilion. Full experience and Speed work here too.")
+        components.html(html, height=640 + 1080 + (920 if arch.get("viz") else 0))
+        st.caption("Click a room (or any chart or drawing) to see which musical information shaped it. Press Walk with music to hear the track while you move through its pavilion. Full experience and Speed work here too.")
         if st.button("Close"):
             st.session_state.pop("sample", None)
             st.rerun()

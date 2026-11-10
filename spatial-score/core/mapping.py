@@ -6,6 +6,7 @@ Per-room rules:
   timbre -> material     melody -> path turning
 
 Pavilion zones (song progression): intro -> rhythm / harmony -> climax -> outro
+All final dimensions are in metres (see _architect).
 """
 import math
 
@@ -25,6 +26,43 @@ def _norm(values):
 
 def _material(c):
     return "concrete" if c < 0.34 else "wood" if c < 0.67 else "glass"
+
+
+PATTERN = {"intro": "soft membrane", "rhythm": "twisted rib lattice", "harmony": "petal shells",
+           "climax": "tree-column canopy", "outro": "dissolving ribs", "none": "woven lattice"}
+
+
+def _architect(out, length_scale):
+    """Convert the rooms (abstract units) into pavilion dimensions in metres."""
+    n = len(out)
+    Lp = float(np.clip(18 + 0.25 * n, 18, 48)) * length_scale
+    k = Lp / max(1e-9, sum(o["length"] for o in out))
+    px = pz = carry = carry_b = 0.0
+    for o in out:
+        z, t, d = o["zone"], o.get("zt", 0.0), o["density"]
+        L = o["length"] * k
+        h = max(1.8, 1.2 + 0.42 * o["height"])
+        hb = max(1.8, 1.2 + 0.42 * o["base"]["height"])
+        sp = 1.7 - 1.2 * d
+        sp_zone = sp * {"intro": 1.6, "rhythm": 0.7, "climax": 0.8, "outro": 1 + 0.8 * t}.get(z, 1.0)
+        hd = o["heading"] * 0.5
+        carry += L / sp_zone          # carry the remainder so the average arch spacing is preserved
+        nr = int(carry)
+        carry -= nr
+        carry_b += L / sp
+        nb = int(carry_b)
+        carry_b -= nb
+        o.update(length=round(L, 2), height=round(h, 2), spacing=round(sp_zone, 2), ribs=nr, heading=round(hd, 3))
+        o["base"] = {"height": round(hb, 2), "openness": o["base"]["openness"], "ribs": nb}
+        o["width"] = round(5 + 8 * o["openness"], 1)
+        o["arch_p"] = round(0.7 + 0.8 * o["norm"]["bright"], 2)
+        o["twist"] = round(float(np.clip(o["move"] * 220, -70, 70)), 1)
+        o["weave"] = round({"intro": .05, "rhythm": .3, "harmony": .55, "climax": .4, "outro": .1}.get(z, .25) + .25 * d, 2)
+        o["pattern"] = PATTERN.get(z, "woven lattice")
+        dx, dz = math.sin(hd), math.cos(hd)
+        o.update(x0=round(px, 2), z0=round(pz, 2), x=round(px + dx * L / 2, 2), z=round(pz + dz * L / 2, 2))
+        px += dx * L
+        pz += dz * L
 
 
 def assign_zones(energy, dens, intro_frac=0.15, outro_frac=0.15, climax_frac=0.15):
@@ -137,11 +175,13 @@ def map_features(features, height_range=(3.0, 18.0), length_scale=1.0,
             "norm": {"pitch": round(float(pitch[i]), 3), "energy": round(float(energy[i]), 3),
                      "bright": round(float(bright[i]), 3), "density": round(float(dens[i]), 3)},
             "base": base, "move": round(move, 3), "turn_deg": round(math.degrees(heading - h_prev), 1),
+            "zt": round(t, 3),
             "heading": round(heading, 3),
             "x0": round(px, 2), "z0": round(pz, 2),
             "x": round(px + dx * length / 2, 2), "z": round(pz + dz * length / 2, 2),
         })
         px += dx * length
         pz += dz * length
+    _architect(out, length_scale)
     counts = {z: zl.count(z) for z in ZONE_ORDER + ["none"] if z in zl}
     return {"tempo": round(tempo, 1), "compression": round(compression, 2), "width": width, "zones": counts, "segments": out}

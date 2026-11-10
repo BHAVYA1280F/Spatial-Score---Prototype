@@ -177,9 +177,9 @@ def summary_html(arch):
         return ""
     avg = lambda k, rows: sum(r[k] for r in rows) / max(1, len(rows))
     hs = [s["height"] for s in S]
-    cards = [("Rooms", n), ("Path length", f'{sum(s["length"] for s in S):.0f} m'),
+    cards = [("Rooms", n), ("Length x width", f'{sum(s["length"] for s in S):.0f} x {max(s["width"] for s in S):.0f} m'),
              ("Height range", f"{min(hs):.1f} to {max(hs):.1f} m"), ("Average height", f"{sum(hs) / n:.1f} m"),
-             ("Average openness", f'{avg("openness", S) * 100:.0f}%'), ("Total ribs", sum(s["ribs"] for s in S))]
+             ("Average openness", f'{avg("openness", S) * 100:.0f}%'), ("Total arches", sum(s["ribs"] for s in S))]
     top = '<div class="grid3">' + "".join(
         f'<div class="card stat tilt reveal"><b>{v}</b><span>{k}</span></div>' for k, v in cards) + "</div>"
     mats = {"concrete": "#8a8a8a", "wood": "#b07d45", "glass": "#9fd8ee"}
@@ -196,6 +196,6 @@ def summary_html(arch):
     table = ""
     if rows:
         table = ('<table class="ztable"><tr><th>Zone</th><th>Rooms</th><th>Avg height</th><th>Avg length</th><th>Openness</th>'
-                 f'<th>Density</th><th>Ribs</th><th>Light</th></tr>{rows}</table>')
+                 f'<th>Density</th><th>Arches</th><th>Light</th></tr>{rows}</table>')
     return (top + '<div class="card reveal" style="margin-top:1rem"><p style="margin:0 0 .5rem">Materials chosen from brightness</p>' + mb +
             f'<p style="margin:.5rem 0 0;font-size:.85rem">{legend}</p>{table and "<div style=margin-top:1rem></div>" + table}</div>')
