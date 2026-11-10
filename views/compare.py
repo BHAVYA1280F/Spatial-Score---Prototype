@@ -2,6 +2,7 @@
 import base64
 import json
 from pathlib import Path
+from typing import Optional
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -19,7 +20,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── sidebar shared mapping controls ──────────────────────────────────────────
+# sidebar shared mapping controls
 with st.sidebar:
     st.header("Shared mapping settings")
     max_seconds = st.slider("Max audio length (s)", 20, 300, 90, 10)
@@ -30,15 +31,15 @@ with st.sidebar:
     use_zones = st.checkbox("Divide into zones", True)
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
-def cached_analyse(data: bytes, name: str, max_s: int, bps: int):
+def cached_analyse(data, name, max_s, bps):
     return analyse(data, name, max_s, bps)
 
 
-def audio_uri_for(raw: bytes, ext: str) -> str | None:
+def audio_uri_for(raw, ext):
+    # type: (bytes, str) -> Optional[str]
     if len(raw) <= 15 * 1024 * 1024:
-        return f"data:{MIME.get(ext, 'audio/mpeg')};base64," + base64.b64encode(raw).decode()
+        return "data:{};base64,".format(MIME.get(ext, "audio/mpeg")) + base64.b64encode(raw).decode()
     return None
 
 
@@ -52,19 +53,20 @@ def build_arch(features):
 def render_slot(col, label, slot_key):
     """Render one upload + pavilion column. Returns (arch, audio_uri) or (None, None)."""
     with col:
-        st.markdown(f"### {label}")
-        source = st.radio("Source", ["Upload", "Demo data"], horizontal=True, key=f"src_{slot_key}")
-
+        st.markdown("### {}".format(label))
+        source = st.radio("Source", ["Upload", "Demo data"], horizontal=True,
+                          key="src_{}".format(slot_key))
         file = None
         if source == "Upload":
             file = st.file_uploader(
                 "Drop a song (MP3, WAV, OGG, FLAC)",
                 type=["mp3", "wav", "ogg", "flac"],
-                key=f"file_{slot_key}",
+                key="file_{}".format(slot_key),
             )
 
-        use_demo = source == "Demo data"
+        use_demo = (source == "Demo data")
         features = None
+        uri = None
 
         if file is not None and not use_demo:
             raw = file.getvalue()
@@ -73,12 +75,11 @@ def render_slot(col, label, slot_key):
                 try:
                     features = cached_analyse(raw, fname, max_seconds, beats_per_segment)
                 except Exception as e:  # noqa: BLE001
-                    st.error(f"Could not analyse this file: {e}")
+                    st.error("Could not analyse this file: {}".format(e))
             ext = fname.rsplit(".", 1)[-1].lower()
             uri = audio_uri_for(raw, ext)
         elif use_demo:
             features = demo_features()
-            uri = None
         else:
             st.info("Upload a track or choose Demo data.")
             return None, None
@@ -93,27 +94,33 @@ def render_slot(col, label, slot_key):
             return None, None
 
         end_t = segs[-1]["start_time"] + segs[-1]["duration"]
-        fmt = lambda x: f"{int(x // 60)}:{int(x % 60):02d}"
+        def fmt(x):
+            return "{}:{:02d}".format(int(x // 60), int(x % 60))
         st.markdown(
-            g.stats([("Tempo", f"{arch['tempo']} BPM"), ("Spaces", len(segs)), ("Walk", fmt(end_t))]),
+            g.stats([
+                ("Tempo", "{} BPM".format(arch["tempo"])),
+                ("Spaces", len(segs)),
+                ("Walk", fmt(end_t)),
+            ]),
             unsafe_allow_html=True,
         )
         return arch, uri
 
 
-# ── two-column layout ─────────────────────────────────────────────────────────
+# two-column layout
 col_a, divider, col_b = st.columns([10, 1, 10])
 
 with divider:
     st.markdown(
-        "<div style='border-left:2px solid rgba(255,255,255,.12);height:600px;margin:60px auto 0;width:0'></div>",
+        "<div style='border-left:2px solid rgba(255,255,255,.12);"
+        "height:600px;margin:60px auto 0;width:0'></div>",
         unsafe_allow_html=True,
     )
 
 arch_a, uri_a = render_slot(col_a, "Song A", "a")
 arch_b, uri_b = render_slot(col_b, "Song B", "b")
 
-# ── show pavilions ────────────────────────────────────────────────────────────
+# show pavilions
 scene_tpl = (ROOT / "viewer" / "scene.html").read_text(encoding="utf-8")
 
 if arch_a is not None:
@@ -128,54 +135,64 @@ if arch_b is not None:
     html_b = scene_tpl.replace("__DATA__", json.dumps(arch_b)).replace("__AUDIO__", json.dumps(uri_b))
     components.html(html_b, height=640)
 
-# ── difference summary ────────────────────────────────────────────────────────
+# difference summary
 if arch_a is not None and arch_b is not None:
     st.markdown("---")
     st.markdown('<div class="eyebrow reveal">How they differ</div>', unsafe_allow_html=True)
 
     segs_a = arch_a["segments"]
     segs_b = arch_b["segments"]
-    avg = lambda segs, k: sum(s[k] for s in segs) / max(1, len(segs))
 
-    def delta_badge(val_a, val_b, unit="", higher="A"):
-        diff = val_b - val_a
-        if abs(diff) < 0.01:
-            return "≈ same"
-        sign = "▲" if diff > 0 else "▼"
-        winner = "B" if diff > 0 else "A"
-        color = "#3fd6a0" if winner == higher else "#ff5c7c"
-        return f'<span style="color:{color}">{sign} {abs(diff):.1f}{unit} ({"B" if diff > 0 else "A"} is {"taller" if unit == " m" else "higher"})</span>'
+    def avg(segs, k):
+        return sum(s[k] for s in segs) / max(1, len(segs))
+
+    zone_order = ["intro", "rhythm", "harmony", "climax", "outro"]
+
+    def zone_str(arch):
+        parts = []
+        for z in zone_order:
+            count = arch["zones"].get(z, 0)
+            if count:
+                color = g.ZONE_COLORS.get(z, "#fff")
+                parts.append('<span style="color:{}">{} {}</span>'.format(color, z, count))
+        return " &middot; ".join(parts)
 
     rows = [
-        ("Tempo", f"{arch_a['tempo']} BPM", f"{arch_b['tempo']} BPM"),
+        ("Tempo",
+         "{} BPM".format(arch_a["tempo"]),
+         "{} BPM".format(arch_b["tempo"])),
         ("Spaces (rooms)", len(segs_a), len(segs_b)),
-        ("Avg height", f"{avg(segs_a, 'height'):.1f} m", f"{avg(segs_b, 'height'):.1f} m"),
-        ("Avg openness", f"{avg(segs_a, 'openness') * 100:.0f}%", f"{avg(segs_b, 'openness') * 100:.0f}%"),
-        ("Total arches", sum(s["ribs"] for s in segs_a), sum(s["ribs"] for s in segs_b)),
+        ("Avg height",
+         "{:.1f} m".format(avg(segs_a, "height")),
+         "{:.1f} m".format(avg(segs_b, "height"))),
+        ("Avg openness",
+         "{:.0f}%".format(avg(segs_a, "openness") * 100),
+         "{:.0f}%".format(avg(segs_b, "openness") * 100)),
+        ("Total arches",
+         sum(s["ribs"] for s in segs_a),
+         sum(s["ribs"] for s in segs_b)),
         ("Dominant material",
-         max({"concrete", "wood", "glass"}, key=lambda m: sum(1 for s in segs_a if s["material"] == m)),
-         max({"concrete", "wood", "glass"}, key=lambda m: sum(1 for s in segs_b if s["material"] == m))),
-        ("Zone breakdown",
-         " · ".join(
-             '<span style="color:{}">{} {}</span>'.format(g.ZONE_COLORS.get(z, "#fff"), z, arch_a["zones"].get(z, 0))
-             for z in ["intro", "rhythm", "harmony", "climax", "outro"] if arch_a["zones"].get(z)),
-         " · ".join(
-             '<span style="color:{}">{} {}</span>'.format(g.ZONE_COLORS.get(z, "#fff"), z, arch_b["zones"].get(z, 0))
-             for z in ["intro", "rhythm", "harmony", "climax", "outro"] if arch_b["zones"].get(z))),
+         max(["concrete", "wood", "glass"],
+             key=lambda m: sum(1 for s in segs_a if s["material"] == m)),
+         max(["concrete", "wood", "glass"],
+             key=lambda m: sum(1 for s in segs_b if s["material"] == m))),
+        ("Zone breakdown", zone_str(arch_a), zone_str(arch_b)),
     ]
 
     table_rows = "".join(
-        f"<tr><td style='color:#a79fc0;padding:6px 12px'>{lab}</td>"
-        f"<td style='color:#fff;padding:6px 12px'>{a}</td>"
-        f"<td style='color:#fff;padding:6px 12px'>{b}</td></tr>"
+        "<tr>"
+        "<td style='color:#a79fc0;padding:6px 12px'>{}</td>"
+        "<td style='color:#fff;padding:6px 12px'>{}</td>"
+        "<td style='color:#fff;padding:6px 12px'>{}</td>"
+        "</tr>".format(lab, a, b)
         for lab, a, b in rows
     )
     st.markdown(
-        f"""<table style='border-collapse:collapse;width:100%;font-size:.9rem'>
-        <tr style='border-bottom:1px solid rgba(255,255,255,.12)'>
-          <th style='text-align:left;padding:6px 12px;color:#cfd6e6'>Metric</th>
-          <th style='text-align:left;padding:6px 12px;color:#ff5c7c'>Song A</th>
-          <th style='text-align:left;padding:6px 12px;color:#4f8cff'>Song B</th>
-        </tr>{table_rows}</table>""",
+        "<table style='border-collapse:collapse;width:100%;font-size:.9rem'>"
+        "<tr style='border-bottom:1px solid rgba(255,255,255,.12)'>"
+        "<th style='text-align:left;padding:6px 12px;color:#cfd6e6'>Metric</th>"
+        "<th style='text-align:left;padding:6px 12px;color:#ff5c7c'>Song A</th>"
+        "<th style='text-align:left;padding:6px 12px;color:#4f8cff'>Song B</th>"
+        "</tr>{}</table>".format(table_rows),
         unsafe_allow_html=True,
     )
