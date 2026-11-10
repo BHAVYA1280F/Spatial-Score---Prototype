@@ -156,10 +156,12 @@ if arch_a is not None and arch_b is not None:
          max({"concrete", "wood", "glass"}, key=lambda m: sum(1 for s in segs_a if s["material"] == m)),
          max({"concrete", "wood", "glass"}, key=lambda m: sum(1 for s in segs_b if s["material"] == m))),
         ("Zone breakdown",
-         " · ".join(f'<span style="color:{g.ZONE_COLORS.get(z, \"#fff\")}">{z} {arch_a["zones"].get(z, 0)}</span>'
-                    for z in ["intro", "rhythm", "harmony", "climax", "outro"] if arch_a["zones"].get(z)),
-         " · ".join(f'<span style="color:{g.ZONE_COLORS.get(z, \"#fff\")}">{z} {arch_b["zones"].get(z, 0)}</span>'
-                    for z in ["intro", "rhythm", "harmony", "climax", "outro"] if arch_b["zones"].get(z))),
+         " · ".join(
+             '<span style="color:{}">{} {}</span>'.format(g.ZONE_COLORS.get(z, "#fff"), z, arch_a["zones"].get(z, 0))
+             for z in ["intro", "rhythm", "harmony", "climax", "outro"] if arch_a["zones"].get(z)),
+         " · ".join(
+             '<span style="color:{}">{} {}</span>'.format(g.ZONE_COLORS.get(z, "#fff"), z, arch_b["zones"].get(z, 0))
+             for z in ["intro", "rhythm", "harmony", "climax", "outro"] if arch_b["zones"].get(z))),
     ]
 
     table_rows = "".join(
