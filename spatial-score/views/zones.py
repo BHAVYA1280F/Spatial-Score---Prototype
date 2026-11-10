@@ -252,7 +252,7 @@ def zone_svg(zname, stats, color, W=320, H=160):
     parts.append(f'<path d="M {cs_x:.1f},{cs_y} L " + "{arch_path}" + " L {cs_x+cs_w:.1f},{cs_y}" fill="none" stroke="{glow}" stroke-width="1.8" opacity="0.95"/>')
 
     # cross-section ribs
-    n_ribs = min(rep["ribs"], 6)
+    n_ribs = max(1, min(rep["ribs"], 6))
     for r in range(n_ribs + 1):
         angle = r * math.pi / n_ribs
         rx = cs_x + cs_w/2 + (cs_w/2) * math.sin(angle)
