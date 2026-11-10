@@ -4,284 +4,309 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#07060d;font-family:system-ui,sans-serif}
 #grid{display:grid;grid-template-columns:repeat(5,1fr);gap:0;width:100%}
-.cell{position:relative;aspect-ratio:16/9;overflow:hidden;cursor:pointer;border-right:1px solid rgba(255,255,255,.08)}
+.cell{position:relative;overflow:hidden;background:#07060d;
+      border-right:1px solid rgba(255,255,255,.08)}
 .cell:last-child{border-right:none}
-.cell canvas{width:100%!important;height:100%!important;display:block}
+.cell img{width:100%;display:block;aspect-ratio:16/9;object-fit:cover}
 .lbl{position:absolute;bottom:0;left:0;right:0;padding:6px 10px;
-     background:linear-gradient(transparent,rgba(7,6,13,.9));
+     background:linear-gradient(transparent,rgba(7,6,13,.92));
      display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none}
 .lbl b{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
-.lbl span{font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.08em;text-transform:uppercase}
+.lbl span{font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.08em}
 .num{position:absolute;top:8px;left:10px;font-size:22px;font-weight:800;
-     font-family:'Syne',system-ui;color:transparent;pointer-events:none;line-height:1}
+     color:transparent;pointer-events:none;line-height:1}
+.loading{position:absolute;inset:0;display:flex;align-items:center;
+         justify-content:center;color:rgba(255,255,255,.3);font-size:11px;
+         letter-spacing:.15em;text-transform:uppercase}
 </style>
 </head><body>
 <div id="grid"></div>
-<script>
-/* ── injected data ── */
-const ARCH = __DATA__;
 
-/* ── zone config ── */
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const ARCH = __DATA__;
+const segs  = ARCH.segments || [];
+
 const ZC = {
-  intro:   {col:"#ffb454", num:"01", label:"INTRO",   sub:"Low · Enclosed · Sparse"},
-  rhythm:  {col:"#4f8cff", num:"02", label:"RHYTHM",  sub:"Ribs · Regular · Linear"},
-  harmony: {col:"#9b6bff", num:"03", label:"HARMONY", sub:"Layered · Glass · Volumes"},
-  climax:  {col:"#ff2d55", num:"04", label:"CLIMAX",  sub:"Tall · Bold · Dramatic"},
-  outro:   {col:"#3fd6a0", num:"05", label:"OUTRO",   sub:"Open · Simple · Fading"},
+  intro:   {col:0xffb454, hex:"#ffb454", num:"01", label:"INTRO",   sub:"Low · Enclosed · Sparse"},
+  rhythm:  {col:0x4f8cff, hex:"#4f8cff", num:"02", label:"RHYTHM",  sub:"Ribs · Regular · Linear"},
+  harmony: {col:0x9b6bff, hex:"#9b6bff", num:"03", label:"HARMONY", sub:"Layered · Glass · Volumes"},
+  climax:  {col:0xff2d55, hex:"#ff2d55", num:"04", label:"CLIMAX",  sub:"Tall · Bold · Dramatic"},
+  outro:   {col:0x3fd6a0, hex:"#3fd6a0", num:"05", label:"OUTRO",   sub:"Open · Simple · Fading"},
 };
 const ORDER = ["intro","rhythm","harmony","climax","outro"];
 
-/* ── material colours ── */
-const MAT = {concrete:"#9a9690", wood:"#c68a4b", glass:"#9fd8ee"};
-
-/* ── build per-zone segment lists ── */
-const segs = ARCH.segments || [];
-function zsegs(z){ return segs.filter(s=>s.zone===z); }
-function avg(arr,k){ return arr.length ? arr.reduce((a,s)=>a+s[k],0)/arr.length : 0; }
-
-/* ── render one zone into a canvas using plain 2D canvas ── */
-function renderZone(canvas, zname){
-  const z    = ZC[zname];
-  const ss   = zsegs(zname);
-  if(!ss.length) return;
-
-  const W = canvas.width, H = canvas.height;
-  const ctx = canvas.getContext("2d");
-
-  /* background */
-  const bg = ctx.createLinearGradient(0,0,0,H);
-  bg.addColorStop(0,"#05060f");
-  bg.addColorStop(1,"#10131c");
-  ctx.fillStyle = bg;
-  ctx.fillRect(0,0,W,H);
-
-  /* zone glow */
-  const gl = ctx.createRadialGradient(W/2,H,0, W/2,H,H*0.75);
-  gl.addColorStop(0, hexA(z.col,0.3));
-  gl.addColorStop(1, hexA(z.col,0));
-  ctx.fillStyle = gl;
-  ctx.fillRect(0,0,W,H);
-
-  /* stars */
-  ctx.fillStyle="rgba(255,255,255,0.4)";
-  for(let i=0;i<40;i++){
-    const sx=(hashRnd(zname+i)*W)|0, sy=(hashRnd(zname+i+100)*H*0.6)|0, sr=hashRnd(zname+i+200)*1.2;
-    ctx.beginPath(); ctx.arc(sx,sy,sr,0,Math.PI*2); ctx.fill();
-  }
-
-  /* floor */
-  ctx.fillStyle="#1a1d2a";
-  ctx.fillRect(0, H-18, W, 18);
-  ctx.fillStyle = hexA(z.col,0.4);
-  ctx.fillRect(0, H-18, W, 1);
-
-  /* city skyline silhouette (outro-style) */
-  if(zname==="outro" || zname==="intro"){
-    ctx.fillStyle="rgba(20,22,36,0.7)";
-    const bld=[0.05,0.14,0.08,0.18,0.06,0.22,0.1,0.16,0.07,0.2,0.09,0.13,0.06];
-    let bx=0;
-    for(let i=0;i<bld.length;i+=2){
-      const bw=(bld[i]||0.07)*W, bh=(bld[i+1]||0.1)*H;
-      ctx.fillRect(bx, H-18-bh, bw+2, bh);
-      bx+=bw+1;
-    }
-  }
-
-  /* moon (intro) */
-  if(zname==="intro"){
-    ctx.fillStyle="rgba(255,235,180,0.18)";
-    ctx.beginPath(); ctx.arc(W*0.85, H*0.12, 14, 0, Math.PI*2); ctx.fill();
-  }
-
-  /* ── arch geometry ── */
-  const maxH = Math.max(...segs.map(s=>s.height), 1);
-  const floorY = H - 18;
-  const totalLen = ss.reduce((a,s)=>a+s.length,0)||1;
-  const margin = W * 0.04;
-  const drawW  = W - margin*2;
-
-  /* longitudinal section silhouette */
-  const archPts = [];
-  let px = margin;
-  archPts.push([px, floorY]);
-
-  for(const s of ss){
-    const rw  = (s.length / totalLen) * drawW;
-    const rh  = (s.height / maxH) * (floorY - 20);
-    const cx  = px + rw/2;
-    const py  = floorY - rh;
-    archPts.push([px,    floorY]);
-    archPts.push([cx,    py]);
-    archPts.push([px+rw, floorY]);
-    px += rw;
-  }
-  archPts.push([px, floorY]);
-
-  /* filled silhouette */
-  const mat    = avg(ss,"openness") > 0.5 ? "glass" : (avg(ss,"height") > 7 ? "wood" : "concrete");
-  const mcol   = MAT[mat] || MAT.concrete;
-
-  ctx.beginPath();
-  ctx.moveTo(archPts[0][0], archPts[0][1]);
-  for(let i=1;i<archPts.length-1;i++){
-    const mx = (archPts[i][0]+archPts[i+1][0])/2;
-    const my = (archPts[i][1]+archPts[i+1][1])/2;
-    ctx.quadraticCurveTo(archPts[i][0],archPts[i][1], mx,my);
-  }
-  ctx.lineTo(archPts[archPts.length-1][0], floorY);
-  ctx.lineTo(margin, floorY);
-  ctx.closePath();
-  ctx.fillStyle = hexA(mcol, 0.22);
-  ctx.fill();
-  ctx.strokeStyle = hexA(z.col, 0.9);
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  /* ribs */
-  px = margin;
-  for(const s of ss){
-    const rw = (s.length / totalLen) * drawW;
-    const rh = (s.height / maxH) * (floorY - 20);
-    const nribs = Math.min(s.ribs||2, 8);
-    for(let r=0;r<=nribs;r++){
-      const rx = px + (r/nribs)*rw;
-      const t_ = r/nribs;
-      const ry = rh * (1-(2*t_-1)**2); // parabola
-      const rTop = floorY - ry;
-      ctx.beginPath();
-      ctx.moveTo(rx, floorY);
-      ctx.lineTo(rx, rTop);
-      ctx.strokeStyle = hexA(z.col, 0.3);
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
-    }
-    px += rw;
-  }
-
-  /* climax spires */
-  if(zname==="climax"){
-    px = margin;
-    for(const s of ss.slice(0, Math.min(ss.length,6))){
-      const rw = (s.length / totalLen) * drawW;
-      const rh = (s.height / maxH) * (floorY - 20);
-      const sx = px + rw/2;
-      const sy = floorY - rh - 10;
-      ctx.beginPath();
-      ctx.moveTo(sx-6, floorY-rh);
-      ctx.lineTo(sx,   sy);
-      ctx.lineTo(sx+6, floorY-rh);
-      ctx.fillStyle = hexA(z.col, 0.6);
-      ctx.fill();
-      px += rw;
-    }
-  }
-
-  /* harmony double-layer ghost arch */
-  if(zname==="harmony"){
-    ctx.setLineDash([4,4]);
-    ctx.beginPath();
-    ctx.moveTo(margin + drawW*0.1, floorY);
-    for(let i=0;i<=20;i++){
-      const t=i/20;
-      const gx = margin + drawW*0.1 + drawW*0.8*t;
-      const gy = floorY - (avg(ss,"height")/maxH)*(floorY-20)*0.72*Math.sin(t*Math.PI);
-      i===0 ? ctx.moveTo(gx,gy) : ctx.lineTo(gx,gy);
-    }
-    ctx.strokeStyle = hexA(z.col, 0.4);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  /* ground uplights at each arch base */
-  px = margin;
-  for(const s of ss.slice(0, Math.min(ss.length,10))){
-    const rw = (s.length / totalLen) * drawW;
-    const nribs = Math.min(s.ribs||2, 5);
-    for(let r=0;r<=nribs;r++){
-      const rx = px + (r/nribs)*rw;
-      const ug = ctx.createRadialGradient(rx,floorY,0, rx,floorY,12);
-      ug.addColorStop(0, hexA(z.col,0.5));
-      ug.addColorStop(1, hexA(z.col,0));
-      ctx.fillStyle = ug;
-      ctx.fillRect(rx-12, floorY-12, 24, 12);
-    }
-    px += rw;
-  }
-
-  /* human figure */
-  const figH = Math.min(avg(ss,"height")/maxH*(floorY-20), floorY-20) * 0.28;
-  const figX = margin + drawW * 0.5;
-  ctx.strokeStyle = "rgba(192,184,216,0.55)";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(figX, floorY);
-  ctx.lineTo(figX, floorY - figH);
-  ctx.stroke();
-  ctx.fillStyle = "rgba(192,184,216,0.55)";
-  ctx.beginPath();
-  ctx.arc(figX, floorY - figH - 3, 2.5, 0, Math.PI*2);
-  ctx.fill();
-
-  /* pulsing light strip top of climax */
-  if(zname==="climax"){
-    px = margin;
-    for(const s of ss.slice(0,Math.min(ss.length,8))){
-      const rw = (s.length/totalLen)*drawW;
-      const rh = (s.height/maxH)*(floorY-20);
-      const gr = ctx.createLinearGradient(px,0,px+rw,0);
-      gr.addColorStop(0,   hexA(z.col,0));
-      gr.addColorStop(0.3, hexA(z.col,0.7));
-      gr.addColorStop(0.7, hexA(z.col,0.7));
-      gr.addColorStop(1,   hexA(z.col,0));
-      ctx.fillStyle = gr;
-      ctx.fillRect(px, floorY-rh-3, rw, 3);
-      px += rw;
-    }
-  }
-}
-
-/* ── helpers ── */
-function hexA(hex,a){
-  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
-  return `rgba(${r},${g},${b},${a})`;
-}
-function hashRnd(str){
-  let h=0;
-  for(let i=0;i<str.length;i++) h=(Math.imul(31,h)+str.charCodeAt(i))|0;
-  return Math.abs(h)/2147483647;
-}
-
-/* ── build grid ── */
-const grid = document.getElementById("grid");
-ORDER.forEach(zname=>{
-  const z  = ZC[zname];
-  const ss = zsegs(zname);
-  if(!ss.length) return;
+/* ── build grid cells first ── */
+const cells = {};
+ORDER.forEach(z => {
+  const zsegs = segs.filter(s=>s.zone===z);
+  if(!zsegs.length) return;
+  const c = ZC[z];
 
   const cell = document.createElement("div");
   cell.className = "cell";
 
-  const canvas = document.createElement("canvas");
-  canvas.width  = 320;
-  canvas.height = 180;
-  cell.appendChild(canvas);
+  const loading = document.createElement("div");
+  loading.className = "loading";
+  loading.textContent = "rendering...";
+  cell.appendChild(loading);
 
-  /* num badge */
+  const img = document.createElement("img");
+  img.style.display = "none";
+  cell.appendChild(img);
+
   const num = document.createElement("div");
   num.className = "num";
-  num.textContent = z.num;
-  num.style.webkitTextStroke = `1.5px ${z.col}`;
+  num.textContent = c.num;
+  num.style.webkitTextStroke = `1.5px ${c.hex}`;
   cell.appendChild(num);
 
-  /* label */
   const lbl = document.createElement("div");
   lbl.className = "lbl";
-  lbl.innerHTML = `<b style="color:${z.col}">${z.label}</b><span>${z.sub}</span>`;
+  lbl.innerHTML = `<b style="color:${c.hex}">${c.label}</b><span>${c.sub}</span>`;
   cell.appendChild(lbl);
 
-  grid.appendChild(cell);
-  renderZone(canvas, zname);
+  document.getElementById("grid").appendChild(cell);
+  cells[z] = { cell, img, loading };
 });
+
+/* ── material colours ── */
+const MAT_COL = { concrete: 0x9a9690, wood: 0xc68a4b, glass: 0x9fd8ee };
+const MAT_ROUGH = { concrete: 0.9, wood: 0.65, glass: 0.05 };
+
+/* ── shared offscreen renderer ── */
+const W = 640, H = 360;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+
+/* ── build scene with full pavilion ── */
+function buildScene() {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x05060f);
+  scene.fog = new THREE.FogExp2(0x05060f, 0.025);
+
+  /* ambient + hemisphere */
+  scene.add(new THREE.AmbientLight(0x1a1030, 0.6));
+  const hemi = new THREE.HemisphereLight(0x2a1a4a, 0x0a0510, 0.5);
+  scene.add(hemi);
+
+  /* floor plane */
+  const floorGeo = new THREE.PlaneGeometry(500, 500);
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1d2a, roughness: 0.9 });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  /* build rooms */
+  segs.forEach(s => {
+    const z   = s.zone;
+    const zc  = ZC[z] || ZC.intro;
+    const col = MAT_COL[s.material] || MAT_COL.concrete;
+    const rough = MAT_ROUGH[s.material] || 0.8;
+    const isGlass = s.material === "glass";
+
+    const mat = new THREE.MeshStandardMaterial({
+      color: col, roughness: rough, metalness: isGlass ? 0.1 : 0,
+      transparent: isGlass, opacity: isGlass ? 0.45 : 1,
+      side: THREE.DoubleSide,
+    });
+
+    const h = s.height, l = s.length, w = s.width || 8;
+    const cx = s.x, cz = s.z, hd = s.heading || 0;
+
+    const grp = new THREE.Group();
+    grp.position.set(cx, 0, cz);
+    grp.rotation.y = -hd;
+
+    /* ── arch ribs ── */
+    const nRibs = Math.min(s.ribs || 2, 10);
+    for (let r = 0; r <= nRibs; r++) {
+      const t = r / nRibs;
+      const rx = (t - 0.5) * l;
+      const archPts = [];
+      const nAP = 20;
+      for (let i = 0; i <= nAP; i++) {
+        const a = (i / nAP) * Math.PI;
+        const tilt = z === "climax" ? Math.sin(a) * 0.18 : 0;
+        archPts.push(new THREE.Vector3(
+          Math.cos(Math.PI - a) * w * 0.5 + tilt * h * 0.3,
+          Math.sin(a) * h,
+          rx
+        ));
+      }
+      const curve = new THREE.CatmullRomCurve3(archPts);
+      const tgeo = new THREE.TubeGeometry(curve, 20, 0.08, 6, false);
+      const tmesh = new THREE.Mesh(tgeo, mat);
+      grp.add(tmesh);
+    }
+
+    /* ── walls (opacity by openness) ── */
+    const wallOp = Math.max(0.05, 0.9 - s.openness * 0.85);
+    if (wallOp > 0.1) {
+      const wallMat = mat.clone();
+      wallMat.transparent = true;
+      wallMat.opacity = wallOp;
+      /* left wall */
+      const wgL = new THREE.PlaneGeometry(l, h * 0.8);
+      const wL = new THREE.Mesh(wgL, wallMat);
+      wL.position.set(-w * 0.5, h * 0.4, 0);
+      wL.rotation.y = Math.PI / 2;
+      grp.add(wL);
+      /* right wall */
+      const wgR = new THREE.PlaneGeometry(l, h * 0.8);
+      const wR = new THREE.Mesh(wgR, wallMat);
+      wR.position.set(w * 0.5, h * 0.4, 0);
+      wR.rotation.y = -Math.PI / 2;
+      grp.add(wR);
+    }
+
+    /* ── roof (only when openness < 0.6 and not climax) ── */
+    if (s.openness < 0.6 && z !== "climax") {
+      const rgeo = new THREE.PlaneGeometry(w * 0.9, l);
+      const rmesh = new THREE.Mesh(rgeo, mat.clone());
+      rmesh.rotation.x = -Math.PI / 2;
+      rmesh.position.y = h * 0.95;
+      grp.add(rmesh);
+    }
+
+    /* ── climax spires ── */
+    if (z === "climax") {
+      for (let r = 0; r <= Math.min(nRibs, 4); r++) {
+        const t = r / Math.max(nRibs, 1);
+        const rx = (t - 0.5) * l;
+        const spireH = h * 0.5;
+        const sgeo = new THREE.ConeGeometry(0.25, spireH, 4);
+        const smesh = new THREE.Mesh(sgeo, new THREE.MeshStandardMaterial({
+          color: zc.col, emissive: zc.col, emissiveIntensity: 0.3, roughness: 0.5
+        }));
+        smesh.position.set(-w * 0.5, h + spireH * 0.5, rx);
+        grp.add(smesh);
+        const smesh2 = smesh.clone();
+        smesh2.position.set(w * 0.5, h + spireH * 0.5, rx);
+        grp.add(smesh2);
+      }
+    }
+
+    /* ── harmony extra shell ── */
+    if (z === "harmony") {
+      const archPts2 = [];
+      for (let i = 0; i <= 20; i++) {
+        const a = (i / 20) * Math.PI;
+        archPts2.push(new THREE.Vector3(
+          Math.cos(Math.PI - a) * w * 0.38,
+          Math.sin(a) * h * 0.75,
+          0
+        ));
+      }
+      const curve2 = new THREE.CatmullRomCurve3(archPts2);
+      const tgeo2 = new THREE.TubeGeometry(curve2, 20, 0.07, 6, false);
+      const ghostMat = new THREE.MeshStandardMaterial({
+        color: zc.col, transparent: true, opacity: 0.25,
+        emissive: zc.col, emissiveIntensity: 0.15, side: THREE.DoubleSide
+      });
+      grp.add(new THREE.Mesh(tgeo2, ghostMat));
+    }
+
+    /* ── light strip on ceiling ── */
+    const lightCol = zc.col;
+    const stripGeo = new THREE.PlaneGeometry(0.3, l * 0.8);
+    const stripMat = new THREE.MeshStandardMaterial({
+      color: lightCol, emissive: lightCol,
+      emissiveIntensity: s.light * 1.2, roughness: 0.5
+    });
+    const strip = new THREE.Mesh(stripGeo, stripMat);
+    strip.rotation.x = Math.PI / 2;
+    strip.position.y = h * 0.92;
+    grp.add(strip);
+
+    /* zone-coloured point light */
+    const pt = new THREE.PointLight(lightCol, s.light * 0.8, l * 3);
+    pt.position.set(0, h * 0.7, 0);
+    grp.add(pt);
+
+    scene.add(grp);
+  });
+
+  return scene;
+}
+
+/* ── camera + render per zone ── */
+function renderZone(scene, zname) {
+  const zsegs = segs.filter(s => s.zone === zname);
+  if (!zsegs.length) return null;
+
+  const camera = new THREE.PerspectiveCamera(70, W / H, 0.1, 500);
+
+  /* pick camera position: inside first room, looking toward the last */
+  const first = zsegs[0];
+  const last  = zsegs[zsegs.length - 1];
+  const hd    = first.heading || 0;
+
+  /* step into first room */
+  const camX = first.x0 + Math.sin(hd) * first.length * 0.3;
+  const camZ = first.z0 + Math.cos(hd) * first.length * 0.3;
+  const eyeH = Math.min(first.height * 0.45, 2.2);
+  camera.position.set(camX, eyeH, camZ);
+
+  /* look toward the zone's end + slight downward tilt */
+  const lookX = last.x  + Math.sin(hd) * last.length * 0.5;
+  const lookZ = last.z  + Math.cos(hd) * last.length * 0.5;
+  camera.lookAt(lookX, eyeH * 0.5, lookZ);
+
+  renderer.render(scene, camera);
+  return renderer.domElement.toDataURL("image/jpeg", 0.9);
+}
+
+/* ── main: build scene once, render all zones ── */
+function run() {
+  try {
+    const scene = buildScene();
+
+    ORDER.forEach(zname => {
+      if (!cells[zname]) return;
+      const { img, loading } = cells[zname];
+
+      /* small timeout so each zone renders after DOM settles */
+      setTimeout(() => {
+        try {
+          const dataURL = renderZone(scene, zname);
+          if (dataURL) {
+            img.src = dataURL;
+            img.onload = () => {
+              loading.style.display = "none";
+              img.style.display = "block";
+            };
+          } else {
+            loading.textContent = "no data";
+          }
+        } catch(e) {
+          loading.textContent = "error";
+          console.error(zname, e);
+        }
+      }, ORDER.indexOf(zname) * 80);
+    });
+
+    /* clean up renderer after all renders */
+    setTimeout(() => {
+      renderer.dispose();
+    }, ORDER.length * 80 + 500);
+
+  } catch(e) {
+    console.error("Scene build error:", e);
+  }
+}
+
+/* wait for Three.js CDN to load */
+if (typeof THREE !== "undefined") {
+  run();
+} else {
+  window.addEventListener("load", run);
+}
 </script>
 </body></html>
