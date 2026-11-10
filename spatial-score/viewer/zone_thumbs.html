@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#07060d;font-family:system-ui,sans-serif}
+#grid{display:grid;grid-template-columns:repeat(5,1fr);gap:0;width:100%}
+.cell{position:relative;aspect-ratio:16/9;overflow:hidden;cursor:pointer;border-right:1px solid rgba(255,255,255,.08)}
+.cell:last-child{border-right:none}
+.cell canvas{width:100%!important;height:100%!important;display:block}
+.lbl{position:absolute;bottom:0;left:0;right:0;padding:6px 10px;
+     background:linear-gradient(transparent,rgba(7,6,13,.9));
+     display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none}
+.lbl b{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.lbl span{font-size:9px;color:rgba(255,255,255,.5);letter-spacing:.08em;text-transform:uppercase}
+.num{position:absolute;top:8px;left:10px;font-size:22px;font-weight:800;
+     font-family:'Syne',system-ui;color:transparent;pointer-events:none;line-height:1}
+</style>
+</head><body>
+<div id="grid"></div>
+<script>
+/* ── injected data ── */
+const ARCH = __DATA__;
+
+/* ── zone config ── */
+const ZC = {
+  intro:   {col:"#ffb454", num:"01", label:"INTRO",   sub:"Low · Enclosed · Sparse"},
+  rhythm:  {col:"#4f8cff", num:"02", label:"RHYTHM",  sub:"Ribs · Regular · Linear"},
+  harmony: {col:"#9b6bff", num:"03", label:"HARMONY", sub:"Layered · Glass · Volumes"},
+  climax:  {col:"#ff2d55", num:"04", label:"CLIMAX",  sub:"Tall · Bold · Dramatic"},
+  outro:   {col:"#3fd6a0", num:"05", label:"OUTRO",   sub:"Open · Simple · Fading"},
+};
+const ORDER = ["intro","rhythm","harmony","climax","outro"];
+
+/* ── material colours ── */
+const MAT = {concrete:"#9a9690", wood:"#c68a4b", glass:"#9fd8ee"};
+
+/* ── build per-zone segment lists ── */
+const segs = ARCH.segments || [];
+function zsegs(z){ return segs.filter(s=>s.zone===z); }
+function avg(arr,k){ return arr.length ? arr.reduce((a,s)=>a+s[k],0)/arr.length : 0; }
+
+/* ── render one zone into a canvas using plain 2D canvas ── */
+function renderZone(canvas, zname){
+  const z    = ZC[zname];
+  const ss   = zsegs(zname);
+  if(!ss.length) return;
+
+  const W = canvas.width, H = canvas.height;
+  const ctx = canvas.getContext("2d");
+
+  /* background */
+  const bg = ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,"#05060f");
+  bg.addColorStop(1,"#10131c");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0,0,W,H);
+
+  /* zone glow */
+  const gl = ctx.createRadialGradient(W/2,H,0, W/2,H,H*0.75);
+  gl.addColorStop(0, hexA(z.col,0.3));
+  gl.addColorStop(1, hexA(z.col,0));
+  ctx.fillStyle = gl;
+  ctx.fillRect(0,0,W,H);
+
+  /* stars */
+  ctx.fillStyle="rgba(255,255,255,0.4)";
+  for(let i=0;i<40;i++){
+    const sx=(hashRnd(zname+i)*W)|0, sy=(hashRnd(zname+i+100)*H*0.6)|0, sr=hashRnd(zname+i+200)*1.2;
+    ctx.beginPath(); ctx.arc(sx,sy,sr,0,Math.PI*2); ctx.fill();
+  }
+
+  /* floor */
+  ctx.fillStyle="#1a1d2a";
+  ctx.fillRect(0, H-18, W, 18);
+  ctx.fillStyle = hexA(z.col,0.4);
+  ctx.fillRect(0, H-18, W, 1);
+
+  /* city skyline silhouette (outro-style) */
+  if(zname==="outro" || zname==="intro"){
+    ctx.fillStyle="rgba(20,22,36,0.7)";
+    const bld=[0.05,0.14,0.08,0.18,0.06,0.22,0.1,0.16,0.07,0.2,0.09,0.13,0.06];
+    let bx=0;
+    for(let i=0;i<bld.length;i+=2){
+      const bw=(bld[i]||0.07)*W, bh=(bld[i+1]||0.1)*H;
+      ctx.fillRect(bx, H-18-bh, bw+2, bh);
+      bx+=bw+1;
+    }
+  }
+
+  /* moon (intro) */
+  if(zname==="intro"){
+    ctx.fillStyle="rgba(255,235,180,0.18)";
+    ctx.beginPath(); ctx.arc(W*0.85, H*0.12, 14, 0, Math.PI*2); ctx.fill();
+  }
+
+  /* ── arch geometry ── */
+  const maxH = Math.max(...segs.map(s=>s.height), 1);
+  const floorY = H - 18;
+  const totalLen = ss.reduce((a,s)=>a+s.length,0)||1;
+  const margin = W * 0.04;
+  const drawW  = W - margin*2;
+
+  /* longitudinal section silhouette */
+  const archPts = [];
+  let px = margin;
+  archPts.push([px, floorY]);
+
+  for(const s of ss){
+    const rw  = (s.length / totalLen) * drawW;
+    const rh  = (s.height / maxH) * (floorY - 20);
+    const cx  = px + rw/2;
+    const py  = floorY - rh;
+    archPts.push([px,    floorY]);
+    archPts.push([cx,    py]);
+    archPts.push([px+rw, floorY]);
+    px += rw;
+  }
+  archPts.push([px, floorY]);
+
+  /* filled silhouette */
+  const mat    = avg(ss,"openness") > 0.5 ? "glass" : (avg(ss,"height") > 7 ? "wood" : "concrete");
+  const mcol   = MAT[mat] || MAT.concrete;
+
+  ctx.beginPath();
+  ctx.moveTo(archPts[0][0], archPts[0][1]);
+  for(let i=1;i<archPts.length-1;i++){
+    const mx = (archPts[i][0]+archPts[i+1][0])/2;
+    const my = (archPts[i][1]+archPts[i+1][1])/2;
+    ctx.quadraticCurveTo(archPts[i][0],archPts[i][1], mx,my);
+  }
+  ctx.lineTo(archPts[archPts.length-1][0], floorY);
+  ctx.lineTo(margin, floorY);
+  ctx.closePath();
+  ctx.fillStyle = hexA(mcol, 0.22);
+  ctx.fill();
+  ctx.strokeStyle = hexA(z.col, 0.9);
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  /* ribs */
+  px = margin;
+  for(const s of ss){
+    const rw = (s.length / totalLen) * drawW;
+    const rh = (s.height / maxH) * (floorY - 20);
+    const nribs = Math.min(s.ribs||2, 8);
+    for(let r=0;r<=nribs;r++){
+      const rx = px + (r/nribs)*rw;
+      const t_ = r/nribs;
+      const ry = rh * (1-(2*t_-1)**2); // parabola
+      const rTop = floorY - ry;
+      ctx.beginPath();
+      ctx.moveTo(rx, floorY);
+      ctx.lineTo(rx, rTop);
+      ctx.strokeStyle = hexA(z.col, 0.3);
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+    px += rw;
+  }
+
+  /* climax spires */
+  if(zname==="climax"){
+    px = margin;
+    for(const s of ss.slice(0, Math.min(ss.length,6))){
+      const rw = (s.length / totalLen) * drawW;
+      const rh = (s.height / maxH) * (floorY - 20);
+      const sx = px + rw/2;
+      const sy = floorY - rh - 10;
+      ctx.beginPath();
+      ctx.moveTo(sx-6, floorY-rh);
+      ctx.lineTo(sx,   sy);
+      ctx.lineTo(sx+6, floorY-rh);
+      ctx.fillStyle = hexA(z.col, 0.6);
+      ctx.fill();
+      px += rw;
+    }
+  }
+
+  /* harmony double-layer ghost arch */
+  if(zname==="harmony"){
+    ctx.setLineDash([4,4]);
+    ctx.beginPath();
+    ctx.moveTo(margin + drawW*0.1, floorY);
+    for(let i=0;i<=20;i++){
+      const t=i/20;
+      const gx = margin + drawW*0.1 + drawW*0.8*t;
+      const gy = floorY - (avg(ss,"height")/maxH)*(floorY-20)*0.72*Math.sin(t*Math.PI);
+      i===0 ? ctx.moveTo(gx,gy) : ctx.lineTo(gx,gy);
+    }
+    ctx.strokeStyle = hexA(z.col, 0.4);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  /* ground uplights at each arch base */
+  px = margin;
+  for(const s of ss.slice(0, Math.min(ss.length,10))){
+    const rw = (s.length / totalLen) * drawW;
+    const nribs = Math.min(s.ribs||2, 5);
+    for(let r=0;r<=nribs;r++){
+      const rx = px + (r/nribs)*rw;
+      const ug = ctx.createRadialGradient(rx,floorY,0, rx,floorY,12);
+      ug.addColorStop(0, hexA(z.col,0.5));
+      ug.addColorStop(1, hexA(z.col,0));
+      ctx.fillStyle = ug;
+      ctx.fillRect(rx-12, floorY-12, 24, 12);
+    }
+    px += rw;
+  }
+
+  /* human figure */
+  const figH = Math.min(avg(ss,"height")/maxH*(floorY-20), floorY-20) * 0.28;
+  const figX = margin + drawW * 0.5;
+  ctx.strokeStyle = "rgba(192,184,216,0.55)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(figX, floorY);
+  ctx.lineTo(figX, floorY - figH);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(192,184,216,0.55)";
+  ctx.beginPath();
+  ctx.arc(figX, floorY - figH - 3, 2.5, 0, Math.PI*2);
+  ctx.fill();
+
+  /* pulsing light strip top of climax */
+  if(zname==="climax"){
+    px = margin;
+    for(const s of ss.slice(0,Math.min(ss.length,8))){
+      const rw = (s.length/totalLen)*drawW;
+      const rh = (s.height/maxH)*(floorY-20);
+      const gr = ctx.createLinearGradient(px,0,px+rw,0);
+      gr.addColorStop(0,   hexA(z.col,0));
+      gr.addColorStop(0.3, hexA(z.col,0.7));
+      gr.addColorStop(0.7, hexA(z.col,0.7));
+      gr.addColorStop(1,   hexA(z.col,0));
+      ctx.fillStyle = gr;
+      ctx.fillRect(px, floorY-rh-3, rw, 3);
+      px += rw;
+    }
+  }
+}
+
+/* ── helpers ── */
+function hexA(hex,a){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function hashRnd(str){
+  let h=0;
+  for(let i=0;i<str.length;i++) h=(Math.imul(31,h)+str.charCodeAt(i))|0;
+  return Math.abs(h)/2147483647;
+}
+
+/* ── build grid ── */
+const grid = document.getElementById("grid");
+ORDER.forEach(zname=>{
+  const z  = ZC[zname];
+  const ss = zsegs(zname);
+  if(!ss.length) return;
+
+  const cell = document.createElement("div");
+  cell.className = "cell";
+
+  const canvas = document.createElement("canvas");
+  canvas.width  = 320;
+  canvas.height = 180;
+  cell.appendChild(canvas);
+
+  /* num badge */
+  const num = document.createElement("div");
+  num.className = "num";
+  num.textContent = z.num;
+  num.style.webkitTextStroke = `1.5px ${z.col}`;
+  cell.appendChild(num);
+
+  /* label */
+  const lbl = document.createElement("div");
+  lbl.className = "lbl";
+  lbl.innerHTML = `<b style="color:${z.col}">${z.label}</b><span>${z.sub}</span>`;
+  cell.appendChild(lbl);
+
+  grid.appendChild(cell);
+  renderZone(canvas, zname);
+});
+</script>
+</body></html>
