@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:#07060d;font-family:'Inter',system-ui,sans-serif;color:#e6e1f5;width:100%}
+table{width:100%;border-collapse:separate;border-spacing:0 7px}
+thead th{padding:.45rem .9rem;color:#a79fc0;font-weight:500;font-size:.68rem;
+  letter-spacing:.1em;text-transform:uppercase;
+  border-bottom:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.025)}
+tbody tr td{padding:.75rem .9rem;vertical-align:middle;
+  background:rgba(255,255,255,.02);
+  border-top:1px solid rgba(255,255,255,.05);
+  border-bottom:1px solid rgba(255,255,255,.05);transition:background .15s}
+tbody tr:hover td{background:rgba(255,255,255,.045)}
+tbody tr td:first-child{border-left:3px solid var(--zc);border-radius:10px 0 0 10px}
+tbody tr td:last-child{border-radius:0 10px 10px 0}
+.znum{font-weight:800;font-size:1.7rem;line-height:1;color:transparent;
+  -webkit-text-stroke:1.4px var(--zc);font-family:system-ui}
+.zname{font-weight:700;font-size:.95rem;color:var(--zc);margin:.08rem 0 .1rem}
+.zsub{color:#a79fc0;font-size:.72rem;font-style:italic}
+.zdesc{color:#d6d0f0;font-size:.82rem;line-height:1.5;margin-bottom:.35rem}
+.zbullets{list-style:none;padding:0;margin:0}
+.zbullets li{color:#b9b1d3;font-size:.78rem;padding:.05rem 0}
+.zbullets li::before{content:"● ";color:var(--zc);font-size:.56rem;vertical-align:middle}
+.rend-wrap{position:relative;border-radius:9px;overflow:hidden;
+  background:#07060d;border:1px solid rgba(255,255,255,.09);
+  width:260px;min-width:260px;min-height:146px}
+.rend-wrap img{display:block;width:100%;height:auto}
+.rend-lbl{position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(transparent,rgba(5,6,15,.88));
+  padding:4px 7px;font-size:9px;color:rgba(255,255,255,.45);
+  letter-spacing:.08em;text-transform:uppercase}
+.rendering{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;color:rgba(255,255,255,.25);font-size:.65rem;
+  letter-spacing:.15em;text-transform:uppercase}
+.stat{text-align:center;min-width:62px}
+.stat b{display:block;font-size:1.25rem;color:var(--zc);font-weight:700}
+.stat span{color:#a79fc0;font-size:.62rem;text-transform:uppercase;letter-spacing:.1em}
+.badge{display:inline-block;padding:.11rem .45rem;border-radius:999px;
+  border:1px solid var(--zc);color:var(--zc);font-size:.67rem;margin:.08rem .08rem 0 0}
+.ts{color:#a79fc0;font-size:.7rem;display:block;margin-top:.35rem}
+</style>
+</head><body>
+<table id="zt">
+  <thead><tr>
+    <th>Zone</th><th>Spatial Character</th>
+    <th style="min-width:264px">3D Model View</th>
+    <th>Spaces</th><th>Avg Height</th><th>Openness</th><th>Arches</th>
+    <th>Material · Pattern · Time</th>
+  </tr></thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const ARCH = __DATA__;
+const segs  = ARCH.segments || [];
+
+const ZC = {
+  intro:   {hex:"#ffb454",num:"01",label:"INTRO",  sub:"Low · Enclosed · Sparse",
+             desc:"A calm and intimate beginning to the spatial experience.",
+             bullets:["Low ceiling","Minimal elements","Soft lighting"]},
+  rhythm:  {hex:"#4f8cff",num:"02",label:"RHYTHM", sub:"Repetitive ribs and frames",
+             desc:"A dynamic space shaped by rhythm and repetition.",
+             bullets:["Structured ribs","Regular spacing","Linear movement"]},
+  harmony: {hex:"#9b6bff",num:"03",label:"HARMONY",sub:"Layered and overlapping spaces",
+             desc:"A more complex space with layered volumes.",
+             bullets:["Multiple layers","Varying heights","Visual connections"]},
+  climax:  {hex:"#ff2d55",num:"04",label:"CLIMAX", sub:"Tall, expansive, expressive",
+             desc:"The highlight of the experience.",
+             bullets:["Greater height","Bold forms","Dramatic lighting"]},
+  outro:   {hex:"#3fd6a0",num:"05",label:"OUTRO",  sub:"Gradually simpler and open",
+             desc:"A calming conclusion to the journey.",
+             bullets:["Open space","Fewer elements","Soft finish"]},
+};
+const ORDER = ["intro","rhythm","harmony","climax","outro"];
+const ZL    = {intro:0xffc27a,rhythm:0x7aaeff,harmony:0xc87aff,climax:0xff4466,outro:0x60e8b0};
+const MAT_COL  = {concrete:0xb9b6ae,wood:0xc68a4b,glass:0x9fd8ee};
+const MAT_R    = {concrete:0.92,wood:0.60,glass:0.08};
+const MAT_O    = {concrete:1,wood:1,glass:0.45};
+
+function zsegs(z){return segs.filter(s=>s.zone===z);}
+function avg(arr,k){return arr.length?arr.reduce((a,s)=>a+s[k],0)/arr.length:0;}
+function fmt(x){return Math.floor(x/60)+":"+String(Math.floor(x%60)).padStart(2,"0");}
+function h2i(h){return parseInt(h.replace("#",""),16);}
+
+/* build table rows */
+const tbody  = document.getElementById("tbody");
+const renders = {};
+ORDER.forEach(zname=>{
+  const ss=zsegs(zname); if(!ss.length)return;
+  const z=ZC[zname];
+  const rooms=ss.length, avgH=avg(ss,"height").toFixed(1),
+        avgO=Math.round(avg(ss,"openness")*100),
+        totalRibs=ss.reduce((a,s)=>a+(s.ribs||0),0),
+        startT=fmt(Math.min(...ss.map(s=>s.start_time))),
+        endT=fmt(Math.max(...ss.map(s=>s.start_time+(s.duration||0))));
+  const mats={}; ss.forEach(s=>{mats[s.material]=(mats[s.material]||0)+1;});
+  const mat=Object.entries(mats).sort((a,b)=>b[1]-a[1])[0][0];
+  const pattern=ss[0].pattern||"woven lattice";
+
+  const wrap=document.createElement("div");
+  wrap.className="rend-wrap";
+  wrap.innerHTML=`<div class="rendering">rendering…</div>`;
+  const lbl=document.createElement("div");
+  lbl.className="rend-lbl";
+  lbl.textContent=`${z.label} · ${rooms} spaces`;
+  wrap.appendChild(lbl);
+  renders[zname]={wrap};
+
+  const tr=document.createElement("tr");
+  tr.style.setProperty("--zc",z.hex);
+  tr.innerHTML=`
+    <td style="min-width:110px">
+      <div class="znum">${z.num}</div>
+      <div class="zname">${z.label}</div>
+      <div class="zsub">${z.sub}</div>
+    </td>
+    <td style="max-width:190px">
+      <div class="zdesc">${z.desc}</div>
+      <ul class="zbullets">${z.bullets.map(b=>`<li>${b}</li>`).join("")}</ul>
+    </td>
+    <td id="rc-${zname}" style="padding:.5rem .7rem"></td>
+    <td class="stat"><b>${rooms}</b><span>Spaces</span></td>
+    <td class="stat"><b>${avgH} m</b><span>Avg height</span></td>
+    <td class="stat"><b>${avgO}%</b><span>Openness</span></td>
+    <td class="stat"><b>${totalRibs}</b><span>Arches</span></td>
+    <td style="min-width:140px">
+      <span class="badge">${mat}</span>
+      <span class="badge">${pattern}</span>
+      <span class="ts">${startT} – ${endT}</span>
+    </td>`;
+  tbody.appendChild(tr);
+  document.getElementById(`rc-${zname}`).appendChild(wrap);
+});
+
+/* Three.js renderer */
+const RW=520,RH=292;
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setSize(RW,RH); renderer.setPixelRatio(1);
+renderer.shadowMap.enabled=true;
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.15;
+
+function buildScene(){
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x060810);
+  scene.fog=new THREE.FogExp2(0x060810,0.018);
+  scene.add(new THREE.HemisphereLight(0x2a1a4a,0x05080f,0.55));
+  scene.add(new THREE.AmbientLight(0x100820,0.4));
+  const sun=new THREE.DirectionalLight(0xffeedd,0.3);
+  sun.position.set(20,40,10); sun.castShadow=true; scene.add(sun);
+  const fl=new THREE.Mesh(new THREE.PlaneGeometry(600,600),
+    new THREE.MeshStandardMaterial({color:0x1a1d2a,roughness:0.95}));
+  fl.rotation.x=-Math.PI/2; fl.receiveShadow=true; scene.add(fl);
+
+  segs.forEach(s=>{
+    const z=s.zone||"none",isGlass=s.material==="glass";
+    const baseMat=new THREE.MeshStandardMaterial({
+      color:MAT_COL[s.material]||MAT_COL.concrete,
+      roughness:MAT_R[s.material]||0.9, metalness:isGlass?0.05:0,
+      transparent:isGlass, opacity:MAT_O[s.material]||1,
+      side:THREE.DoubleSide
+    });
+    const h=s.height,l=s.length,w=s.width||8,
+          p=s.arch_p||1, tw=(s.twist||0)*Math.PI/180, tilt=s.tilt||0;
+    const grp=new THREE.Group();
+    grp.position.set(s.x,0,s.z);
+    grp.rotation.y=-(s.heading||0);
+
+    /* arch ribs — CatmullRomCurve3 tube exactly as scene.html */
+    const nR=Math.min(s.ribs||2,12);
+    for(let ri=0;ri<=nR;ri++){
+      const t=ri/Math.max(nR,1), rx=(t-0.5)*l;
+      const pts=[];
+      for(let ai=0;ai<=22;ai++){
+        const a=ai/22*Math.PI;
+        const yN=Math.pow(Math.abs(Math.sin(a)),1/Math.max(p,0.3));
+        const xN=Math.cos(Math.PI-a);
+        const lean=tilt*yN*h*0.4;
+        pts.push(new THREE.Vector3(xN*w*0.5+lean, yN*h, rx+Math.sin(tw)*xN*0.3));
+      }
+      const mesh=new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),22,0.075,7,false),baseMat);
+      mesh.castShadow=true; grp.add(mesh);
+    }
+
+    /* rhythm woven strands */
+    if(z==="rhythm"){
+      const sm=baseMat.clone(); sm.transparent=false;
+      for(let si=0;si<4;si++){
+        const pts=[];
+        for(let ai=0;ai<=10;ai++){
+          const a=ai/10*Math.PI;
+          const yN=Math.pow(Math.abs(Math.sin(a)),1/Math.max(p,0.3));
+          pts.push(new THREE.Vector3(Math.cos(Math.PI-a)*w*0.5,yN*h,(si/3-0.5)*l+(ai/10)*l*0.6));
+        }
+        grp.add(new THREE.Mesh(
+          new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),10,0.04,5,false),sm));
+      }
+    }
+
+    /* harmony ghost shell */
+    if(z==="harmony"){
+      const gm=new THREE.MeshStandardMaterial({
+        color:h2i(ZC.harmony.hex),transparent:true,opacity:0.22,
+        emissive:h2i(ZC.harmony.hex),emissiveIntensity:0.1,side:THREE.DoubleSide,roughness:0.1
+      });
+      const pts2=[];
+      for(let ai=0;ai<=22;ai++){
+        const a=ai/22*Math.PI;
+        pts2.push(new THREE.Vector3(Math.cos(Math.PI-a)*w*0.38,
+          Math.pow(Math.abs(Math.sin(a)),1/Math.max(p,0.3))*h*0.78,0));
+      }
+      grp.add(new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts2),22,0.06,7,false),gm));
+    }
+
+    /* walls */
+    const wo=Math.max(0.04,(1-s.openness)*0.75);
+    if(wo>0.08){
+      const wm=baseMat.clone(); wm.transparent=true; wm.opacity=wo;
+      const wg=new THREE.PlaneGeometry(l,h*0.85);
+      const wL=new THREE.Mesh(wg,wm);
+      wL.position.set(-w*0.5-tilt*h*0.2,h*0.4,0); wL.rotation.y=Math.PI/2; grp.add(wL);
+      const wR=wL.clone(); wR.position.set(w*0.5+tilt*h*0.2,h*0.4,0); wR.rotation.y=-Math.PI/2; grp.add(wR);
+    }
+
+    /* roof */
+    if(s.openness<0.6&&z!=="climax"){
+      const rm=baseMat.clone(); rm.transparent=true; rm.opacity=0.5-s.openness*0.5;
+      const roof=new THREE.Mesh(new THREE.PlaneGeometry(w*0.88,l*0.92),rm);
+      roof.rotation.x=-Math.PI/2; roof.position.y=h*0.95; grp.add(roof);
+    }
+
+    /* climax spires */
+    if(z==="climax"){
+      const sp=new THREE.MeshStandardMaterial({
+        color:ZL.climax,emissive:ZL.climax,emissiveIntensity:0.4,roughness:0.5});
+      for(let si=0;si<=Math.min(nR,6);si++){
+        const rz=((si/Math.max(nR,1))-0.5)*l, spH=h*0.45;
+        const sg=new THREE.ConeGeometry(0.22,spH,5);
+        const sm=new THREE.Mesh(sg,sp);
+        sm.position.set(-w*0.5-0.1,h+spH*0.5,rz); grp.add(sm);
+        const sm2=sm.clone(); sm2.position.set(w*0.5+0.1,h+spH*0.5,rz); grp.add(sm2);
+      }
+    }
+
+    /* light strip */
+    const lc=ZL[z]||0xffc27a;
+    const lgm=new THREE.MeshStandardMaterial({color:lc,emissive:lc,
+      emissiveIntensity:(s.light||0.5)*1.5,roughness:0.3});
+    const lstrip=new THREE.Mesh(new THREE.PlaneGeometry(0.28,l*0.85),lgm);
+    lstrip.rotation.x=Math.PI/2; lstrip.position.y=h*0.93; grp.add(lstrip);
+
+    /* point lights */
+    const ptL=new THREE.PointLight(lc,(s.light||0.5)*1.0,l*4,1.8);
+    ptL.position.set(0,h*0.65,0); grp.add(ptL);
+    for(let ri=0;ri<=Math.min(nR,4);ri++){
+      const rz=((ri/Math.max(nR,1))-0.5)*l;
+      const ul=new THREE.PointLight(lc,0.25,4,2); ul.position.set(-w*0.5+0.5,0.3,rz); grp.add(ul);
+      const ur=ul.clone(); ur.position.set(w*0.5-0.5,0.3,rz); grp.add(ur);
+    }
+    scene.add(grp);
+  });
+  return scene;
+}
+
+function renderZone(scene,zname){
+  const ss=zsegs(zname); if(!ss.length)return null;
+  const cs=ss[Math.min(1,ss.length-1)], ls=ss[Math.min(Math.floor(ss.length*0.6),ss.length-1)];
+  const hd=cs.heading||0;
+  const ex=cs.x0+Math.sin(hd)*cs.length*0.4-Math.cos(hd)*0.6;
+  const ez=cs.z0+Math.cos(hd)*cs.length*0.4+Math.sin(hd)*0.6;
+  const ey=Math.min(cs.height*0.38,2.0);
+  const tx=ls.x+Math.sin(hd)*ls.length*0.3, tz=ls.z+Math.cos(hd)*ls.length*0.3;
+  const cam=new THREE.PerspectiveCamera(68,RW/RH,0.1,400);
+  cam.position.set(ex,ey,ez); cam.lookAt(tx,ey*0.65,tz);
+  renderer.render(scene,cam);
+  return renderer.domElement.toDataURL("image/jpeg",0.92);
+}
+
+function run(){
+  if(typeof THREE==="undefined"){setTimeout(run,100);return;}
+  const scene=buildScene();
+  ORDER.forEach((zname,i)=>{
+    if(!renders[zname])return;
+    setTimeout(()=>{
+      try{
+        const url=renderZone(scene,zname);
+        if(!url)return;
+        const wrap=renders[zname].wrap;
+        wrap.innerHTML="";
+        const img=document.createElement("img");
+        img.src=url; img.style.display="block"; img.style.width="100%";
+        wrap.appendChild(img);
+        const lbl=document.createElement("div");
+        lbl.className="rend-lbl";
+        lbl.textContent=ZC[zname].label+" zone · "+zsegs(zname).length+" spaces";
+        wrap.appendChild(lbl);
+        wrap.style.minHeight="";
+      }catch(e){renders[zname].wrap.innerHTML=`<div class="rendering">error</div>`;console.error(zname,e);}
+    },i*100);
+  });
+  setTimeout(()=>renderer.dispose(),ORDER.length*100+800);
+}
+window.addEventListener("load",run);
+</script>
+</body></html>
