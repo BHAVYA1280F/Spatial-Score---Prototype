@@ -1,0 +1,7 @@
+streamlit>=1.46
+librosa>=0.10
+numpy
+scipy
+pandas
+soundfile
+pillow

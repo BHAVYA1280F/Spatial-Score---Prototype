@@ -81,9 +81,6 @@ if features:
                         intro_frac=intro_pct / 100, outro_frac=outro_pct / 100, climax_frac=climax_pct / 100)
     arch["song_seconds"] = features.get("total_seconds")
     arch["viz"] = features.get("viz")
-    # persist so the Zones page can read the current song's data
-    st.session_state["arch"] = arch
-    st.session_state["song_name"] = fname if not use_demo else "Demo track"
     segs = arch["segments"]
     if segs:
         end_t = segs[-1]["start_time"] + segs[-1]["duration"]
